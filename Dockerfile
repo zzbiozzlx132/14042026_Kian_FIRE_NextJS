@@ -25,9 +25,6 @@ WORKDIR /app
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 
-RUN addgroup --system --gid 1001 nodejs
-RUN adduser --system --uid 1001 nextjs
-
 # Copy Prisma for migrations + seed
 COPY --from=builder /app/prisma ./prisma
 COPY --from=builder /app/package.json ./package.json
@@ -35,12 +32,11 @@ COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
 COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
 COPY --from=builder /app/node_modules/prisma ./node_modules/prisma
 COPY --from=builder /app/node_modules/bcryptjs ./node_modules/bcryptjs
-COPY --from=builder /app/node_modules/@prisma/client ./node_modules/@prisma/client
 
 # Copy app
 COPY --from=builder /app/public ./public
-COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
-COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
+COPY --from=builder /app/.next/standalone ./
+COPY --from=builder /app/.next/static ./.next/static
 
 # Copy startup script
 COPY --from=builder /app/docker-entrypoint.sh ./docker-entrypoint.sh
@@ -50,4 +46,5 @@ EXPOSE 3000
 ENV PORT=3000
 ENV HOSTNAME="0.0.0.0"
 
+# Run as root so prisma db push can work, then exec node
 ENTRYPOINT ["./docker-entrypoint.sh"]
