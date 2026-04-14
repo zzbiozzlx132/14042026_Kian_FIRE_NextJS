@@ -22,6 +22,7 @@ export default function AssetsPage() {
   const [showInvModal, setShowInvModal] = useState(false);
   const [editInv, setEditInv] = useState<any>(null);
   const [deleteTarget, setDeleteTarget] = useState<any>(null);
+  const [sellTarget, setSellTarget] = useState<any>(null);
 
   useEffect(() => {
     fetch("/api/accounts").then(r => r.json()).then(d => { if (Array.isArray(d)) setAccounts(d); });
@@ -51,16 +52,19 @@ export default function AssetsPage() {
     setDeleteTarget(null);
   };
 
-  const handleMarkSold = async (inv: any) => {
-    const res = await fetch(`/api/investments/${inv.id}`, {
-      method: "PUT", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ status: "sold" })
+  const handleSellComplete = (result: { holding: any; sold: any }) => {
+    setInvestments(prev => {
+      let updated = [...prev];
+      if (result.holding) {
+        updated = updated.map(i => i.id === result.holding.id ? result.holding : i);
+      } else {
+        // Sold all - remove the holding
+        updated = updated.filter(i => i.id !== sellTarget?.id);
+      }
+      if (result.sold) updated.push(result.sold);
+      return updated;
     });
-    if (res.ok) {
-      const updated = await res.json();
-      setInvestments(prev => prev.map(i => i.id === updated.id ? updated : i));
-      toast.success("Đã đánh dấu đã bán");
-    }
+    setSellTarget(null);
   };
 
   return (
@@ -145,7 +149,7 @@ export default function AssetsPage() {
           ) : (
             <div className="space-y-3">
               {holdingInvestments.map(inv => <InvestmentCard key={inv.id} inv={inv}
-                onEdit={() => setEditInv(inv)} onDelete={() => setDeleteTarget(inv)} onMarkSold={() => handleMarkSold(inv)} />)}
+                onEdit={() => setEditInv(inv)} onDelete={() => setDeleteTarget(inv)} onSell={() => setSellTarget(inv)} />)}
             </div>
           )}
 
@@ -169,6 +173,7 @@ export default function AssetsPage() {
       {showAddModal && <AddAccountModal onClose={() => setShowAddModal(false)} onCreated={(acc: any) => { setAccounts(prev => [...prev, acc]); setShowAddModal(false); }} />}
       {showInvModal && <AddInvestmentModal onClose={() => setShowInvModal(false)} onCreated={(inv: any) => { setInvestments(prev => [inv, ...prev]); setShowInvModal(false); }} />}
       {editInv && <EditInvestmentModal inv={editInv} onClose={() => setEditInv(null)} onUpdated={(updated: any) => { setInvestments(prev => prev.map(i => i.id === updated.id ? updated : i)); setEditInv(null); }} />}
+      {sellTarget && <SellInvestmentModal inv={sellTarget} onClose={() => setSellTarget(null)} onSold={handleSellComplete} />}
 
       {/* ═══ DELETE CONFIRM MODAL ═══ */}
       {deleteTarget && (
@@ -198,8 +203,8 @@ export default function AssetsPage() {
 }
 
 /* ═══ INVESTMENT CARD ═══ */
-function InvestmentCard({ inv, sold, onEdit, onDelete, onMarkSold }: {
-  inv: any; sold?: boolean; onEdit: () => void; onDelete: () => void; onMarkSold?: () => void;
+function InvestmentCard({ inv, sold, onEdit, onDelete, onSell }: {
+  inv: any; sold?: boolean; onEdit: () => void; onDelete: () => void; onSell?: () => void;
 }) {
   const cost = inv.buyPrice * inv.quantity;
   const value = inv.currentPrice * inv.quantity;
@@ -265,9 +270,9 @@ function InvestmentCard({ inv, sold, onEdit, onDelete, onMarkSold }: {
 
           {/* Actions */}
           <div className="flex gap-1 mt-3 justify-end opacity-0 group-hover:opacity-100 transition-all">
-            {!sold && onMarkSold && (
-              <button onClick={onMarkSold} className="text-[10px] px-2 py-1 rounded-lg bg-[var(--bg-input)] text-[var(--text-muted)] hover:text-[var(--warning)] hover:bg-yellow-50 transition-colors font-medium">
-                Đã bán
+            {!sold && onSell && (
+              <button onClick={onSell} className="text-[10px] px-2 py-1 rounded-lg bg-[var(--bg-input)] text-[var(--text-muted)] hover:text-[var(--warning)] hover:bg-yellow-50 transition-colors font-medium">
+                Bán
               </button>
             )}
             <button onClick={onEdit} className="p-1.5 rounded-lg hover:bg-[var(--bg-input)] text-[var(--text-muted)] hover:text-[var(--accent)] transition-colors" title="Sửa">
@@ -445,6 +450,108 @@ function EditInvestmentModal({ inv, onClose, onUpdated }: { inv: any; onClose: (
         </div>
 
         <div className="flex gap-3 mt-6"><button onClick={onClose} className="btn btn-ghost flex-1">Hủy</button><button onClick={handleSubmit} disabled={loading} className="btn btn-primary flex-1">{loading ? "Đang lưu..." : "Cập nhật"}</button></div>
+      </div>
+    </div>
+  );
+}
+
+/* ═══ SELL INVESTMENT MODAL ═══ */
+function SellInvestmentModal({ inv, onClose, onSold }: { inv: any; onClose: () => void; onSold: (result: { holding: any; sold: any }) => void }) {
+  const [quantitySold, setQuantitySold] = useState(inv.quantity.toString());
+  const [sellPrice, setSellPrice] = useState(inv.currentPrice.toString());
+  const [loading, setLoading] = useState(false);
+  const unit = INV_UNIT[inv.type] || "đơn vị";
+
+  const qty = parseFloat(quantitySold) || 0;
+  const price = parseFloat(sellPrice) || 0;
+  const totalSellValue = qty * price;
+  const totalBuyCost = qty * inv.buyPrice;
+  const pnl = totalSellValue - totalBuyCost;
+  const remaining = inv.quantity - qty;
+  const isPartial = remaining > 0;
+
+  const handleSubmit = async () => {
+    if (qty <= 0) { toast.error("Số lượng bán phải > 0"); return; }
+    if (qty > inv.quantity) { toast.error(`Chỉ có ${inv.quantity} ${unit}`); return; }
+    if (price <= 0) { toast.error("Giá bán phải > 0"); return; }
+
+    setLoading(true);
+    const res = await fetch(`/api/investments/${inv.id}/sell`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ quantitySold: qty, sellPrice: price }),
+    });
+    if (res.ok) {
+      const result = await res.json();
+      toast.success(isPartial ? `Đã bán ${qty} ${unit}, còn ${remaining} ${unit}` : "Đã bán toàn bộ");
+      onSold(result);
+    } else {
+      const data = await res.json();
+      toast.error(data.error || "Bán thất bại");
+    }
+    setLoading(false);
+  };
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal-content max-w-md" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between mb-6">
+          <h2 className="text-lg font-bold">Bán: {inv.name}</h2>
+          <button onClick={onClose} className="text-[var(--text-muted)] hover:text-[var(--text-primary)]"><X size={20} /></button>
+        </div>
+
+        {/* Current info */}
+        <div className="p-3 rounded-xl bg-[var(--bg-input)] text-xs mb-4 space-y-1">
+          <div className="flex justify-between"><span className="text-[var(--text-muted)]">Đang nắm giữ</span><span className="font-bold">{inv.quantity} {unit}</span></div>
+          <div className="flex justify-between"><span className="text-[var(--text-muted)]">Giá mua</span><span className="font-semibold">{fmtMoney(inv.buyPrice)}/{unit}</span></div>
+          <div className="flex justify-between"><span className="text-[var(--text-muted)]">Tổng vốn</span><span className="font-semibold">{fmtMoney(inv.buyPrice * inv.quantity)}</span></div>
+        </div>
+
+        <div className="grid grid-cols-2 gap-4">
+          <div className="form-group">
+            <label className="form-label">Số lượng bán ({unit})</label>
+            <input className="input" type="number" step="any" min="0" max={inv.quantity}
+              value={quantitySold} onChange={e => setQuantitySold(e.target.value)} autoFocus />
+            <div className="flex gap-2 mt-2">
+              <button type="button" onClick={() => setQuantitySold(inv.quantity.toString())}
+                className="text-[10px] px-2 py-1 rounded bg-[var(--bg-input)] text-[var(--text-muted)] hover:text-[var(--accent)] font-medium">Tất cả</button>
+              <button type="button" onClick={() => setQuantitySold((inv.quantity / 2).toString())}
+                className="text-[10px] px-2 py-1 rounded bg-[var(--bg-input)] text-[var(--text-muted)] hover:text-[var(--accent)] font-medium">50%</button>
+            </div>
+          </div>
+          <div className="form-group">
+            <label className="form-label">Giá bán / {unit} (VNĐ)</label>
+            <input className="input text-lg font-bold" type="number" value={sellPrice} onChange={e => setSellPrice(e.target.value)} />
+          </div>
+        </div>
+
+        {/* P&L Preview */}
+        {qty > 0 && price > 0 && (
+          <div className="mt-4 p-3 rounded-xl border border-[var(--border)] text-xs space-y-1.5">
+            <div className="flex justify-between"><span className="text-[var(--text-muted)]">Tiền thu về</span><span className="font-bold text-sm">{fmtMoney(totalSellValue)}</span></div>
+            <div className="flex justify-between"><span className="text-[var(--text-muted)]">Vốn gốc ({qty} × {fmtMoney(inv.buyPrice)})</span><span className="font-semibold">{fmtMoney(totalBuyCost)}</span></div>
+            <div className="border-t border-[var(--border)] my-1"></div>
+            <div className="flex justify-between">
+              <span className="text-[var(--text-muted)] font-semibold">Lãi/Lỗ</span>
+              <span className={`font-bold text-sm ${pnl >= 0 ? "text-[var(--success)]" : "text-[var(--danger)]"}`}>
+                {pnl >= 0 ? "+" : ""}{fmtMoney(pnl)} ({((pnl / totalBuyCost) * 100).toFixed(1)}%)
+              </span>
+            </div>
+            {isPartial && (
+              <div className="flex justify-between pt-1 text-[var(--info)]">
+                <span className="font-medium">Còn giữ lại</span>
+                <span className="font-bold">{remaining} {unit}</span>
+              </div>
+            )}
+          </div>
+        )}
+
+        <div className="flex gap-3 mt-6">
+          <button onClick={onClose} className="btn btn-ghost flex-1">Hủy</button>
+          <button onClick={handleSubmit} disabled={loading || qty <= 0 || price <= 0}
+            className="btn flex-1 bg-[var(--warning)] text-white hover:opacity-90">
+            {loading ? "Đang xử lý..." : isPartial ? `Bán ${qty} ${unit}` : "Bán tất cả"}
+          </button>
+        </div>
       </div>
     </div>
   );
