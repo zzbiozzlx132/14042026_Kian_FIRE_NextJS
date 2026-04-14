@@ -1,7 +1,7 @@
 services:
-  fire-db-local:
+  fire-db:
     image: postgres:16-alpine
-    container_name: kian-fire-db-local
+    container_name: kian-fire-db
     environment:
       - POSTGRES_DB=kianfire
       - POSTGRES_USER=postgres
@@ -9,8 +9,23 @@ services:
     ports:
       - "5432:5432"
     volumes:
-      - fire-pgdata-local:/var/lib/postgresql/data
+      - fire-pgdata:/var/lib/postgresql/data
     restart: unless-stopped
 
+  fire-web:
+    build: .
+    container_name: kian-fire-web
+    ports:
+      - "3001:3000"
+    environment:
+      - DATABASE_URL=postgresql://postgres:kianfire2026@fire-db:5432/kianfire?schema=public
+      - NEXTAUTH_URL=https://fire.kiantr.com
+      - NEXTAUTH_SECRET=kian-fire-vps-super-secret-key-18022026
+    depends_on:
+      - fire-db
+    restart: unless-stopped
+    command: >
+      sh -c "npx prisma db push && tsx prisma/seed.ts && node server.js"
+
 volumes:
-  fire-pgdata-local:
+  fire-pgdata:
