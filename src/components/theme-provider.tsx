@@ -8,16 +8,16 @@ const ThemeContext = createContext<{
   theme: Theme;
   toggleTheme: () => void;
 }>({
-  theme: "dark",
+  theme: "light",
   toggleTheme: () => {},
 });
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
-  const [theme, setTheme] = useState<Theme>("dark");
+  const [theme, setTheme] = useState<Theme>("light");
 
   useEffect(() => {
     const saved = localStorage.getItem("kf_theme") as Theme;
-    const initial = saved || "dark";
+    const initial = saved || "light";
     setTheme(initial);
     document.documentElement.setAttribute("data-theme", initial);
   }, []);

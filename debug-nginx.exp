@@ -1,0 +1,16 @@
+#!/usr/bin/expect -f
+set timeout 60
+spawn ssh -o StrictHostKeyChecking=no root@222.255.238.138
+
+expect "password:"
+send "RaQ362nZi86mwMPxlipk\r"
+
+expect "# "
+send "cat /etc/nginx/sites-enabled/fire.kiantr.com\r"
+
+expect "# "
+send "curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:3001\r"
+
+expect "# "
+send "exit\r"
+expect eof

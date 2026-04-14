@@ -1,0 +1,16 @@
+#!/usr/bin/expect -f
+set timeout 600
+spawn ssh -o StrictHostKeyChecking=no root@222.255.238.138
+
+expect "password:"
+send "RaQ362nZi86mwMPxlipk\r"
+
+expect "# "
+send "cd /root/14042026_Kian_FIRE_NextJS && git pull origin main && docker compose down && docker compose up -d --build 2>&1 | tail -30\r"
+
+expect "# "
+send "echo 'WAITING 10s for containers...' && sleep 10 && docker ps -a && docker logs kian-fire-web --tail 20 2>&1\r"
+
+expect "# "
+send "exit\r"
+expect eof

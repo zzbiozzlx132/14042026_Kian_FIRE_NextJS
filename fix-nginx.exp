@@ -1,0 +1,25 @@
+#!/usr/bin/expect -f
+set timeout 60
+
+# SCP the nginx config file
+spawn scp -o StrictHostKeyChecking=no {/Users/kian/Documents/Code/14042026 Kian_FIRE/kian-fire/fire.kiantr.com.nginx} root@222.255.238.138:/etc/nginx/sites-available/fire.kiantr.com
+
+expect "password:"
+send "RaQ362nZi86mwMPxlipk\r"
+expect eof
+
+# SSH in and reload nginx
+spawn ssh -o StrictHostKeyChecking=no root@222.255.238.138
+
+expect "password:"
+send "RaQ362nZi86mwMPxlipk\r"
+
+expect "# "
+send "ln -sf /etc/nginx/sites-available/fire.kiantr.com /etc/nginx/sites-enabled/ && nginx -t && systemctl reload nginx && echo 'NGINX_OK'\r"
+
+expect "# "
+send "curl -sk -o /dev/null -w '%{http_code}' https://fire.kiantr.com && echo ''\r"
+
+expect "# "
+send "exit\r"
+expect eof
