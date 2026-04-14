@@ -1,0 +1,13 @@
+#!/usr/bin/expect -f
+set timeout 30
+spawn ssh -o StrictHostKeyChecking=no root@222.255.238.138
+
+expect "password:"
+send "RaQ362nZi86mwMPxlipk\r"
+
+expect "# "
+send "docker ps -a && echo '---LOGS---' && docker logs kian-fire-web --tail 50 2>&1\r"
+
+expect "# "
+send "exit\r"
+expect eof

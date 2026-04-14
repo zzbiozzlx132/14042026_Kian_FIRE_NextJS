@@ -11,6 +11,11 @@ services:
     volumes:
       - fire-pgdata:/var/lib/postgresql/data
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
   fire-web:
     build: .
@@ -21,11 +26,12 @@ services:
       - DATABASE_URL=postgresql://postgres:kianfire2026@fire-db:5432/kianfire?schema=public
       - NEXTAUTH_URL=https://fire.kiantr.com
       - NEXTAUTH_SECRET=kian-fire-vps-super-secret-key-18022026
+      - AUTH_SECRET=kian-fire-vps-super-secret-key-18022026
     depends_on:
-      - fire-db
+      fire-db:
+        condition: service_healthy
     restart: unless-stopped
-    command: >
-      sh -c "npx prisma db push && tsx prisma/seed.ts && node server.js"
+    command: ["node", "server.js"]
 
 volumes:
   fire-pgdata:
