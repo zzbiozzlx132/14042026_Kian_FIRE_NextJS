@@ -186,25 +186,91 @@ function UsersPanel() {
 /* ═══════ CATEGORIES PANEL ═══════ */
 function CategoriesPanel() {
   const [categories, setCategories] = useState<any[]>([]);
+  const [showForm, setShowForm] = useState(false);
+  const [form, setForm] = useState({ name: "", type: "EXPENSE" });
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     fetch("/api/categories").then(r => r.json()).then(d => { if (Array.isArray(d)) setCategories(d); });
   }, []);
+
+  const handleCreate = async () => {
+    if (!form.name) { toast.error("Vui lòng nhập tên hạng mục"); return; }
+    setLoading(true);
+    const res = await fetch("/api/categories", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(form),
+    });
+    if (res.ok) {
+      const cat = await res.json();
+      setCategories(prev => [...prev, cat]);
+      setForm({ name: "", type: "EXPENSE" });
+      setShowForm(false);
+      toast.success("Đã thêm hạng mục");
+    } else {
+      toast.error("Thêm thất bại");
+    }
+    setLoading(false);
+  };
+
+  const handleDelete = async (id: string) => {
+    const res = await fetch(`/api/categories?id=${id}`, { method: "DELETE" });
+    if (res.ok) {
+      setCategories(prev => prev.filter(c => c.id !== id));
+      toast.success("Đã xoá hạng mục");
+    } else {
+      const data = await res.json();
+      toast.error(data.error || "Xoá thất bại");
+    }
+  };
 
   const expenses = categories.filter(c => c.type === "EXPENSE");
   const incomes = categories.filter(c => c.type === "INCOME");
 
   return (
     <div className="card">
-      <h3 className="section-label mb-6">Hạng mục thu chi</h3>
+      <div className="flex items-center justify-between mb-6">
+        <h3 className="section-label mb-0">Hạng mục thu chi</h3>
+        <button onClick={() => setShowForm(!showForm)} className="btn btn-primary text-sm py-2 px-4">
+          <Plus size={16} /> Thêm
+        </button>
+      </div>
+
+      {showForm && (
+        <div className="border border-[var(--border)] rounded-xl p-4 mb-6 bg-[var(--bg-input)]">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+            <div>
+              <label className="form-label">Tên hạng mục</label>
+              <input className="input" placeholder="VD: Bảo hiểm" value={form.name} onChange={e => setForm({...form, name: e.target.value})} />
+            </div>
+            <div>
+              <label className="form-label">Loại</label>
+              <select className="input" value={form.type} onChange={e => setForm({...form, type: e.target.value})}>
+                <option value="EXPENSE">Chi tiêu</option>
+                <option value="INCOME">Thu nhập</option>
+              </select>
+            </div>
+          </div>
+          <div className="flex gap-2 justify-end">
+            <button onClick={() => setShowForm(false)} className="btn btn-ghost text-sm py-2">Hủy</button>
+            <button onClick={handleCreate} disabled={loading} className="btn btn-primary text-sm py-2">
+              {loading ? "Đang tạo..." : "Tạo hạng mục"}
+            </button>
+          </div>
+        </div>
+      )}
 
       <div className="mb-6">
         <div className="text-sm font-semibold text-[var(--danger)] mb-3 uppercase tracking-wider">Chi tiêu</div>
         <div className="flex flex-wrap gap-2">
           {expenses.length === 0 ? (
-            <p className="text-sm text-[var(--text-muted)]">Chạy Seed database để tạo hạng mục mặc định</p>
+            <p className="text-sm text-[var(--text-muted)]">Chưa có hạng mục chi tiêu</p>
           ) : expenses.map(c => (
-            <span key={c.id} className="badge border border-[var(--border)] text-[var(--text-secondary)] px-3 py-1.5">{c.name}</span>
+            <span key={c.id} className="badge border border-[var(--border)] text-[var(--text-secondary)] px-3 py-1.5 group inline-flex items-center gap-1.5">
+              {c.name}
+              <button onClick={() => handleDelete(c.id)} className="opacity-0 group-hover:opacity-100 text-[var(--danger)] hover:scale-125 transition-all" title="Xoá">×</button>
+            </span>
           ))}
         </div>
       </div>
@@ -213,9 +279,12 @@ function CategoriesPanel() {
         <div className="text-sm font-semibold text-[var(--success)] mb-3 uppercase tracking-wider">Thu nhập</div>
         <div className="flex flex-wrap gap-2">
           {incomes.length === 0 ? (
-            <p className="text-sm text-[var(--text-muted)]">Chạy Seed database để tạo hạng mục mặc định</p>
+            <p className="text-sm text-[var(--text-muted)]">Chưa có hạng mục thu nhập</p>
           ) : incomes.map(c => (
-            <span key={c.id} className="badge border border-[var(--border)] text-[var(--text-secondary)] px-3 py-1.5">{c.name}</span>
+            <span key={c.id} className="badge border border-[var(--border)] text-[var(--text-secondary)] px-3 py-1.5 group inline-flex items-center gap-1.5">
+              {c.name}
+              <button onClick={() => handleDelete(c.id)} className="opacity-0 group-hover:opacity-100 text-[var(--danger)] hover:scale-125 transition-all" title="Xoá">×</button>
+            </span>
           ))}
         </div>
       </div>
