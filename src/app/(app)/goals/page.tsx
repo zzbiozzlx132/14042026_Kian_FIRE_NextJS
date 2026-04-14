@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { fmtMoney, fmtMoneyCompact } from "@/lib/utils";
-import { TrendingUp, Calculator, Target, ArrowUpRight, ArrowDownRight, Info, Flame, Percent } from "lucide-react";
+import { TrendingUp, Calculator, Target, ArrowUpRight, ArrowDownRight, Info, Flame, Percent, Lightbulb, AlertTriangle, CheckCircle2, CircleAlert } from "lucide-react";
 
 interface Projection {
   years: number;
@@ -17,6 +17,13 @@ interface FireScenario {
   requiredReturnPct: number;
 }
 
+interface Insight {
+  type: string;
+  title: string;
+  desc: string;
+  impact: string;
+}
+
 interface ProjectionData {
   totalInvested: number;
   totalCurrentValue: number;
@@ -24,6 +31,7 @@ interface ProjectionData {
   returnPct: number;
   expectedReturnPct: number;
   inflationPct: number;
+  savingsRate: number;
   avgMonthlyIncome: number;
   avgMonthlyExpense: number;
   avgMonthlySavings: number;
@@ -32,6 +40,7 @@ interface ProjectionData {
   yearsToFire: number;
   totalNetWorth: number;
   fireScenarios: FireScenario[];
+  insights: Insight[];
   projections: Projection[];
   investmentCount: number;
 }
@@ -49,10 +58,10 @@ export default function GoalsPage() {
 
   const d = data || {
     totalInvested: 0, totalCurrentValue: 0, totalPnL: 0, returnPct: 0,
-    expectedReturnPct: 10, inflationPct: 3, avgMonthlyIncome: 0,
-    avgMonthlyExpense: 0, avgMonthlySavings: 0, fireNumber: 0,
-    fireProgress: 0, yearsToFire: -1, totalNetWorth: 0,
-    fireScenarios: [], projections: [], investmentCount: 0,
+    expectedReturnPct: 10, inflationPct: 3, savingsRate: 0,
+    avgMonthlyIncome: 0, avgMonthlyExpense: 0, avgMonthlySavings: 0,
+    fireNumber: 0, fireProgress: 0, yearsToFire: -1, totalNetWorth: 0,
+    fireScenarios: [], insights: [], projections: [], investmentCount: 0,
   };
 
   return (
@@ -150,6 +159,55 @@ export default function GoalsPage() {
           <span><span className="inline-block w-2 h-2 rounded-full bg-[var(--danger)] mr-1"></span> Rất khó (20-50%)</span>
         </div>
       </div>
+
+      {/* ═══ SMART INSIGHTS ═══ */}
+      {d.insights.length > 0 && (
+        <div className="card mb-8">
+          <div className="flex items-center gap-3 mb-5">
+            <div className="w-9 h-9 bg-amber-50 text-amber-600 rounded-xl flex items-center justify-center">
+              <Lightbulb size={18} />
+            </div>
+            <div>
+              <h2 className="text-base font-bold">Đề xuất thông minh</h2>
+              <p className="text-xs text-[var(--text-muted)]">Phân tích dữ liệu thu chi & đầu tư để đẩy nhanh FIRE</p>
+            </div>
+          </div>
+
+          <div className="space-y-3">
+            {d.insights.map((insight, i) => {
+              const iconMap: Record<string, any> = {
+                success: CheckCircle2,
+                warning: AlertTriangle,
+                danger: CircleAlert,
+                info: Info,
+              };
+              const colorMap: Record<string, string> = {
+                success: "bg-emerald-50 text-emerald-600 border-emerald-200",
+                warning: "bg-amber-50 text-amber-600 border-amber-200",
+                danger: "bg-red-50 text-red-600 border-red-200",
+                info: "bg-blue-50 text-blue-600 border-blue-200",
+              };
+              const InsightIcon = iconMap[insight.type] || Info;
+              const colors = colorMap[insight.type] || colorMap.info;
+
+              return (
+                <div key={i} className={`flex gap-4 p-4 rounded-xl border ${colors.split(' ')[2] || 'border-[var(--border)]'} bg-[var(--bg-card)]`}>
+                  <div className={`w-9 h-9 rounded-lg flex-shrink-0 flex items-center justify-center ${colors.split(' ').slice(0, 2).join(' ')}`}>
+                    <InsightIcon size={18} />
+                  </div>
+                  <div className="flex-1">
+                    <div className="font-semibold text-sm mb-1">{insight.title}</div>
+                    <div className="text-xs text-[var(--text-secondary)] leading-relaxed mb-2">{insight.desc}</div>
+                    <div className="inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider px-2.5 py-1 rounded-full bg-[var(--bg-input)] text-[var(--text-muted)]">
+                      <Target size={10} /> {insight.impact}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* ═══ INVESTMENT SUMMARY ═══ */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">

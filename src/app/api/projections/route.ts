@@ -2,6 +2,13 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/lib/auth";
 
+function fmtCompact(n: number): string {
+  if (Math.abs(n) >= 1_000_000_000) return (n / 1_000_000_000).toFixed(1) + "B";
+  if (Math.abs(n) >= 1_000_000) return (n / 1_000_000).toFixed(1) + "M";
+  if (Math.abs(n) >= 1_000) return Math.round(n / 1_000) + "K";
+  return Math.round(n).toString();
+}
+
 export async function GET() {
   const session = await auth();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -148,12 +155,107 @@ export async function GET() {
       };
     });
 
+    // ═══ 7. SMART INSIGHTS ═══
+    const insights: { type: string; title: string; desc: string; impact: string }[] = [];
+
+    const savingsRate = avgMonthlyIncome > 0 ? (avgMonthlySavings / avgMonthlyIncome) * 100 : 0;
+
+    // Savings rate analysis
+    if (savingsRate < 20 && avgMonthlyIncome > 0) {
+      insights.push({
+        type: "warning",
+        title: "Tỷ lệ tiết kiệm thấp",
+        desc: `Bạn đang tiết kiệm ${Math.round(savingsRate)}% thu nhập. Để FIRE sớm, nên đẩy lên ít nhất 30-50%. Giảm 10% chi tiêu không thiết yếu có thể rút ngắn ${yearsToFire > 0 ? Math.round(yearsToFire * 0.15) : 3}-${yearsToFire > 0 ? Math.round(yearsToFire * 0.25) : 5} năm đến FIRE.`,
+        impact: `Tiết kiệm thêm ${fmtCompact(avgMonthlyExpense * 0.1)}/tháng`,
+      });
+    } else if (savingsRate >= 50) {
+      insights.push({
+        type: "success",
+        title: "Tỷ lệ tiết kiệm xuất sắc",
+        desc: `${Math.round(savingsRate)}% thu nhập được tiết kiệm — đây là mức FIRE accelerator. Duy trì và tập trung tối ưu lợi nhuận đầu tư.`,
+        impact: "Duy trì momentum",
+      });
+    } else if (savingsRate >= 20) {
+      insights.push({
+        type: "info",
+        title: "Tỷ lệ tiết kiệm khá",
+        desc: `${Math.round(savingsRate)}% thu nhập. Tăng thêm 10% nữa sẽ rút ngắn thời gian FIRE đáng kể.`,
+        impact: `Tiết kiệm thêm ${fmtCompact(avgMonthlyIncome * 0.1)}/tháng`,
+      });
+    }
+
+    // Investment allocation
+    if (totalCurrentValue === 0 && totalNetWorth > 0) {
+      insights.push({
+        type: "warning",
+        title: "Chưa có khoản đầu tư nào",
+        desc: `Bạn có ${fmtCompact(totalNetWorth)} tài sản nhưng chưa đầu tư. Tiền mặt mất giá ${inflationPct}%/năm do lạm phát. Bắt đầu với ETF/Quỹ chỉ số để lãi kép hoạt động.`,
+        impact: `Đầu tư ${fmtCompact(totalNetWorth * 0.5)} có thể sinh thêm ${fmtCompact(totalNetWorth * 0.5 * expectedReturnPct / 100)}/năm`,
+      });
+    } else if (totalCurrentValue > 0 && returnPct < 0) {
+      insights.push({
+        type: "danger",
+        title: "Danh mục đang lỗ",
+        desc: `Danh mục đầu tư đang lỗ ${Math.abs(Math.round(returnPct))}%. Xem xét đa dạng hoá hoặc chuyển sang các kênh ít biến động hơn (Tiết kiệm kỳ hạn, Trái phiếu).`,
+        impact: "Giảm rủi ro, bảo toàn vốn",
+      });
+    } else if (totalCurrentValue > 0 && returnPct > 0 && returnPct < expectedReturnPct) {
+      insights.push({
+        type: "info",
+        title: "Lợi nhuận dưới kỳ vọng",
+        desc: `Danh mục đang lãi ${Math.round(returnPct)}% nhưng kỳ vọng là ${expectedReturnPct}%. Cân nhắc tái phân bổ vào kênh lợi nhuận cao hơn.`,
+        impact: `Tăng ${expectedReturnPct - Math.round(returnPct)}% nữa`,
+      });
+    }
+
+    // Expense optimization
+    if (avgMonthlyExpense > avgMonthlyIncome * 0.8 && avgMonthlyIncome > 0) {
+      insights.push({
+        type: "danger",
+        title: "Chi tiêu gần sát thu nhập",
+        desc: `Chi tiêu chiếm ${Math.round((avgMonthlyExpense / avgMonthlyIncome) * 100)}% thu nhập. Rà soát các khoản chi không thiết yếu (ăn ngoài, giải trí, mua sắm) để cắt giảm.`,
+        impact: "Cắt 20% chi không thiết yếu",
+      });
+    }
+
+    // Income growth suggestion
+    if (avgMonthlyIncome > 0 && yearsToFire > 15) {
+      insights.push({
+        type: "info",
+        title: "Tăng thu nhập để FIRE sớm hơn",
+        desc: `Với thu nhập hiện tại, FIRE cần ${yearsToFire > 0 ? yearsToFire : "50+"} năm. Tăng thu nhập thêm 30% (side hustle, thăng tiến, freelance) có thể rút ngắn 5-8 năm.`,
+        impact: `Thu nhập thêm ${fmtCompact(avgMonthlyIncome * 0.3)}/tháng`,
+      });
+    }
+
+    // Emergency fund check
+    const emergencyFundTarget = avgMonthlyExpense * 6;
+    if (totalCash < emergencyFundTarget && avgMonthlyExpense > 0) {
+      insights.push({
+        type: "warning",
+        title: "Quỹ khẩn cấp chưa đủ",
+        desc: `Cần ít nhất ${fmtCompact(emergencyFundTarget)} (6 tháng chi tiêu) trong tài khoản dễ rút. Hiện có ${fmtCompact(totalCash)}.`,
+        impact: `Cần thêm ${fmtCompact(Math.max(0, emergencyFundTarget - totalCash))}`,
+      });
+    }
+
+    // No data scenario
+    if (avgMonthlyIncome === 0 && avgMonthlyExpense === 0) {
+      insights.push({
+        type: "info",
+        title: "Bắt đầu ghi chép thu chi",
+        desc: "Chưa có dữ liệu giao dịch. Hãy ghi chép thu nhập và chi tiêu hàng ngày để hệ thống tính toán FIRE chính xác hơn.",
+        impact: "Nhập giao dịch đầu tiên",
+      });
+    }
+
     return NextResponse.json({
       // Investment
       totalInvested, totalCurrentValue, totalPnL,
       returnPct: Math.round(returnPct * 100) / 100,
       investmentCount: investments.length,
       // Cash flow
+      savingsRate: Math.round(savingsRate),
       avgMonthlyIncome: Math.round(avgMonthlyIncome),
       avgMonthlyExpense: Math.round(avgMonthlyExpense),
       avgMonthlySavings: Math.round(avgMonthlySavings),
@@ -163,6 +265,8 @@ export async function GET() {
       yearsToFire,
       totalNetWorth: Math.round(totalNetWorth),
       fireScenarios,
+      // Insights
+      insights,
       // Settings
       expectedReturnPct, inflationPct,
       // Projections
@@ -172,9 +276,9 @@ export async function GET() {
     console.error("Projection API Error:", error);
     return NextResponse.json({
       totalInvested: 0, totalCurrentValue: 0, totalPnL: 0, returnPct: 0,
-      investmentCount: 0, avgMonthlyIncome: 0, avgMonthlyExpense: 0,
+      investmentCount: 0, savingsRate: 0, avgMonthlyIncome: 0, avgMonthlyExpense: 0,
       avgMonthlySavings: 0, fireNumber: 0, fireProgress: 0, yearsToFire: -1,
-      totalNetWorth: 0, fireScenarios: [], expectedReturnPct: 10,
+      totalNetWorth: 0, fireScenarios: [], insights: [], expectedReturnPct: 10,
       inflationPct: 3, projections: [],
     });
   }
