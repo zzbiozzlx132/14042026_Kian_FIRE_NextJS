@@ -1,0 +1,322 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ═══════════════════════════════════════
+// AUTH & USERS
+// ═══════════════════════════════════════
+model User {
+  id        String   @id @default(cuid())
+  name      String
+  email     String   @unique
+  password  String
+  role      UserRole @default(USER)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  transactions Transaction[]
+  logs         ActivityLog[]
+}
+
+enum UserRole {
+  ADMIN
+  USER
+}
+
+// ═══════════════════════════════════════
+// TÀI KHOẢN
+// ═══════════════════════════════════════
+model Account {
+  id             String      @id @default(cuid())
+  name           String
+  type           AccountType
+  initialBalance Float       @default(0)
+  note           String?
+  status         String      @default("active")
+  createdAt      DateTime    @default(now())
+
+  // Credit card specific
+  creditLimit   Float?
+  statementDay  Int?
+  dueDay        Int?
+  annualFee     Float?   @default(0)
+  firstYearFree Boolean  @default(false)
+  rewardType    String?  @default("none")
+  openedDate    DateTime?
+
+  transactionsFrom Transaction[] @relation("FromAccount")
+  transactionsTo   Transaction[] @relation("ToAccount")
+  goalLinks        Goal[]        @relation("LinkedAccount")
+  recurringTx      RecurringTransaction[]
+}
+
+enum AccountType {
+  CASH
+  BANK
+  CREDIT_CARD
+  E_WALLET
+  SAVINGS
+  INVESTMENT
+}
+
+// ═══════════════════════════════════════
+// HẠNG MỤC
+// ═══════════════════════════════════════
+model Category {
+  id        String          @id @default(cuid())
+  name      String
+  type      TransactionType
+  icon      String          @default("circle")
+  budget    Float           @default(0)
+  status    String          @default("active")
+  sortOrder Int             @default(0)
+
+  transactions Transaction[]
+  recurringTx  RecurringTransaction[]
+}
+
+// ═══════════════════════════════════════
+// GIAO DỊCH
+// ═══════════════════════════════════════
+model Transaction {
+  id            String          @id @default(cuid())
+  date          DateTime
+  type          TransactionType
+  amount        Float
+  fromAccountId String?
+  toAccountId   String?
+  categoryId    String?
+  description   String?
+  essential     Essential?
+  rating        Rating?
+  receiptUrl    String?
+  metadata      Json?
+
+  createdById String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  fromAccount Account?  @relation("FromAccount", fields: [fromAccountId], references: [id])
+  toAccount   Account?  @relation("ToAccount", fields: [toAccountId], references: [id])
+  category    Category? @relation(fields: [categoryId], references: [id])
+  createdBy   User?     @relation(fields: [createdById], references: [id])
+
+  @@index([date])
+  @@index([type])
+  @@index([fromAccountId])
+  @@index([categoryId])
+}
+
+enum TransactionType {
+  EXPENSE
+  INCOME
+  TRANSFER
+}
+
+enum Essential {
+  ESSENTIAL
+  NON_ESSENTIAL
+}
+
+enum Rating {
+  WORTHY
+  NORMAL
+  WASTEFUL
+}
+
+// ═══════════════════════════════════════
+// VAY/NỢ
+// ═══════════════════════════════════════
+model Debt {
+  id           String    @id @default(cuid())
+  type         DebtType
+  partner      String
+  principal    Float
+  interestRate Float     @default(0)
+  paid         Float     @default(0)
+  borrowDate   DateTime?
+  dueDate      DateTime?
+  status       String    @default("active")
+  note         String?
+  createdAt    DateTime  @default(now())
+}
+
+enum DebtType {
+  LEND
+  BORROW
+}
+
+// ═══════════════════════════════════════
+// ĐẦU TƯ
+// ═══════════════════════════════════════
+model Investment {
+  id           String         @id @default(cuid())
+  name         String
+  type         InvestmentType
+  buyPrice     Float
+  currentPrice Float
+  quantity     Float          @default(1)
+  buyDate      DateTime?
+  status       String         @default("holding")
+  note         String?
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+}
+
+enum InvestmentType {
+  GOLD
+  STOCK
+  CRYPTO
+  REAL_ESTATE
+  TERM_DEPOSIT
+  OTHER
+}
+
+// ═══════════════════════════════════════
+// TÀI SẢN VẬT LÝ
+// ═══════════════════════════════════════
+model PhysicalAsset {
+  id                String   @id @default(cuid())
+  name              String
+  quantity          Int      @default(1)
+  depreciationYears Float    @default(0)
+  monthsUsed        Int      @default(0)
+  status            String   @default("in_use")
+  totalCost         Float    @default(0)
+  salePrice         Float?
+  purchaseDate      DateTime?
+  value             Float    @default(0)
+  remainingValue    Float    @default(0)
+  trend             String   @default("stable")
+  annualChangePct   Float    @default(0)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+}
+
+// ═══════════════════════════════════════
+// NGÂN SÁCH
+// ═══════════════════════════════════════
+model Budget {
+  id           String     @id @default(cuid())
+  name         String
+  type         BudgetType
+  percentage   Float
+  note         String?
+  linkedGoalId String?
+  linkedGoal   Goal?      @relation(fields: [linkedGoalId], references: [id])
+}
+
+enum BudgetType {
+  EXPENSE_LIVING
+  DEBT_PAYMENT
+  CREDIT_CARD_PAYMENT
+  INVEST
+  GOAL_FUND
+  SAVINGS
+  OTHER
+}
+
+// ═══════════════════════════════════════
+// MỤC TIÊU TÀI CHÍNH
+// ═══════════════════════════════════════
+model Goal {
+  id              String    @id @default(cuid())
+  name            String
+  type            GoalType
+  target          Float     @default(0)
+  current         Float     @default(0)
+  linkedAccountId String?
+  startDate       DateTime?
+  deadline        DateTime?
+  priority        Int       @default(99)
+  emergencyMonths Int       @default(6)
+  status          String    @default("active")
+  note            String?
+  createdAt       DateTime  @default(now())
+
+  linkedAccount Account? @relation("LinkedAccount", fields: [linkedAccountId], references: [id])
+  budgets       Budget[]
+}
+
+enum GoalType {
+  EMERGENCY
+  DEBT_FREE
+  SAVINGS
+  INVEST
+  FIRE
+  PASSIVE
+  EDUCATION
+  HEALTH
+  RETIRE
+  BUSINESS
+}
+
+// ═══════════════════════════════════════
+// GIAO DỊCH ĐỊNH KỲ
+// ═══════════════════════════════════════
+model RecurringTransaction {
+  id              String          @id @default(cuid())
+  name            String
+  type            TransactionType
+  categoryId      String?
+  accountId       String?
+  defaultAmount   Float
+  startDate       DateTime?
+  endDate         DateTime?
+  status          String          @default("active")
+  note            String?
+  generatedMonths String?
+  createdAt       DateTime        @default(now())
+
+  category Category? @relation(fields: [categoryId], references: [id])
+  account  Account?  @relation(fields: [accountId], references: [id])
+}
+
+// ═══════════════════════════════════════
+// LIFE PLAN SETTINGS
+// ═══════════════════════════════════════
+model LifePlanSettings {
+  id                   String @id @default("default")
+  currentAge           Int    @default(27)
+  targetAge            Int    @default(40)
+  targetMonthlyExpense Float  @default(0)
+  expectedReturnPct    Float  @default(10)
+  inflationPct         Float  @default(3)
+  swrPct               Float  @default(4)
+  plannedMonthlyInvest Float  @default(0)
+}
+
+// ═══════════════════════════════════════
+// NHẬT KÝ HOẠT ĐỘNG
+// ═══════════════════════════════════════
+model ActivityLog {
+  id        String   @id @default(cuid())
+  action    String
+  details   String?
+  userId    String?
+  createdAt DateTime @default(now())
+
+  user User? @relation(fields: [userId], references: [id])
+
+  @@index([createdAt])
+}
+
+// ═══════════════════════════════════════
+// TRANSACTION TEMPLATES
+// ═══════════════════════════════════════
+model TransactionTemplate {
+  id          String          @id @default(cuid())
+  name        String
+  type        TransactionType
+  amount      Float?
+  categoryId  String?
+  accountId   String?
+  description String?
+  essential   Essential?
+  sortOrder   Int             @default(0)
+}
