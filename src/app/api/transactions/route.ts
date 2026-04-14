@@ -62,8 +62,7 @@ export async function POST(req: Request) {
         categoryId: body.categoryId || null,
         description: body.description || "",
         essential: body.essential || "NON_ESSENTIAL",
-        rating: body.rating || "NORMAL",
-        createdById: session.user.id
+        createdById: session.user?.id || ""
       }
     });
 

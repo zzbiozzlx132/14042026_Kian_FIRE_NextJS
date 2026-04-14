@@ -57,7 +57,7 @@ async function main() {
         icon: cat.icon,
         sortOrder: cat.sortOrder,
       }
-    }).catch(async (e) => {
+    }).catch(async (e: any) => {
         // If it fails because ID exists, ignore. If it is another error, log it.
         const existing = await prisma.category.findFirst({
             where: { name: cat.name, type: cat.type as any }

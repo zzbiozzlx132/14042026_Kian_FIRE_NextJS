@@ -1,16 +1,13 @@
 #!/usr/bin/expect -f
-set timeout 60
+set timeout 600
 set host [lindex $argv 0]
 set user [lindex $argv 1]
 set password [lindex $argv 2]
 
 spawn ssh -o StrictHostKeyChecking=no $user@$host "
-  cd /root
-  rm -rf 14042026_Kian_FIRE_NextJS
-  git clone https://github.com/zzbiozzlx132/14042026_Kian_FIRE_NextJS.git
-  cd 14042026_Kian_FIRE_NextJS
-  docker compose down 2>/dev/null || true
-  docker compose up -d
+  cd /root/14042026_Kian_FIRE_NextJS
+  git pull origin main
+  docker compose up -d --build
 "
 
 expect {

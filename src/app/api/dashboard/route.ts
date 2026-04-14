@@ -31,12 +31,12 @@ export async function GET(req: Request) {
     // 1. Calculate Balances
     const balances: Record<string, number> = {};
     const accountTypes: Record<string, string> = {};
-    accounts.forEach(a => {
+    accounts.forEach((a: any) => {
       balances[a.id] = a.initialBalance;
       accountTypes[a.id] = a.type;
     });
 
-    allTx.forEach(tx => {
+    allTx.forEach((tx: any) => {
       if (tx.type === "EXPENSE" && tx.fromAccountId) {
         balances[tx.fromAccountId] = (balances[tx.fromAccountId] || 0) - tx.amount;
       } else if (tx.type === "INCOME" && tx.fromAccountId) {
@@ -63,7 +63,7 @@ export async function GET(req: Request) {
     // 2. Debts & Investments
     const debts = await prisma.debt.findMany({ where: { status: "active" } });
     let totalDebtAmount = totalCredit;
-    debts.forEach(d => {
+    debts.forEach((d: any) => {
       if (d.type === "BORROW") {
         totalDebtAmount += (d.principal - d.paid);
       } else if (d.type === "LEND") {
@@ -73,14 +73,14 @@ export async function GET(req: Request) {
 
     const investments = await prisma.investment.findMany({ where: { status: "holding" } });
     let totalInvest = 0;
-    investments.forEach(i => {
+    investments.forEach((i: any) => {
       totalInvest += (i.quantity * i.currentPrice);
     });
     totalAssets += totalInvest;
 
     // 3. Physical Assets
     const physicals = await prisma.physicalAsset.findMany();
-    physicals.forEach(p => {
+    physicals.forEach((p: any) => {
       if (p.status !== "sold") {
         totalAssets += p.value > 0 ? p.value : p.remainingValue;
       }
@@ -104,7 +104,7 @@ export async function GET(req: Request) {
     let monthlyIncome = 0;
     let monthlyExpense = 0;
 
-    txThisMonth.forEach(tx => {
+    txThisMonth.forEach((tx: any) => {
       if (tx.type === "INCOME") monthlyIncome += tx.amount;
       else if (tx.type === "EXPENSE") monthlyExpense += tx.amount;
       else if (tx.type === "TRANSFER") {
