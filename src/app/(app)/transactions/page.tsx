@@ -2,13 +2,15 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Plus, Search, ArrowUpRight, ArrowDownRight, ArrowLeftRight, ReceiptText } from "lucide-react";
+import { Plus, Search, ArrowUpRight, ArrowDownRight, ArrowLeftRight, ReceiptText, AlertTriangle } from "lucide-react";
+import { toast } from "sonner";
 import { fmtMoney, fmtDate } from "@/lib/utils";
 
 export default function TransactionsPage() {
   const [transactions, setTransactions] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
+  const [deleteId, setDeleteId] = useState<string | null>(null);
 
   useEffect(() => {
     fetch("/api/transactions")
@@ -26,12 +28,16 @@ export default function TransactionsPage() {
     );
   });
 
-  const handleDelete = async (id: string) => {
-    if (!confirm("Xác nhận xoá giao dịch?")) return;
-    const res = await fetch(`/api/transactions/${id}`, { method: "DELETE" });
+  const handleDelete = async () => {
+    if (!deleteId) return;
+    const res = await fetch(`/api/transactions/${deleteId}`, { method: "DELETE" });
     if (res.ok) {
-      setTransactions(prev => prev.filter(t => t.id !== id));
+      setTransactions(prev => prev.filter(t => t.id !== deleteId));
+      toast.success("Đã xoá giao dịch");
+    } else {
+      toast.error("Xoá thất bại");
     }
+    setDeleteId(null);
   };
 
   return (
@@ -135,7 +141,7 @@ export default function TransactionsPage() {
 
               {/* Delete */}
               <button
-                onClick={() => handleDelete(tx.id)}
+                onClick={() => setDeleteId(tx.id)}
                 className="opacity-0 group-hover:opacity-100 text-[var(--text-muted)] hover:text-[var(--danger)] p-1 transition-all"
                 title="Xoá"
               >
@@ -143,6 +149,27 @@ export default function TransactionsPage() {
               </button>
             </div>
           ))}
+        </div>
+      )}
+
+      {/* Delete Confirm Modal */}
+      {deleteId && (
+        <div className="modal-overlay" onClick={() => setDeleteId(null)}>
+          <div className="modal-content max-w-sm" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-xl bg-red-50 text-red-600 flex items-center justify-center flex-shrink-0">
+                <AlertTriangle size={20} />
+              </div>
+              <div>
+                <h3 className="font-bold">Xác nhận xoá</h3>
+                <p className="text-sm text-[var(--text-muted)]">Giao dịch này sẽ bị xoá vĩnh viễn.</p>
+              </div>
+            </div>
+            <div className="flex gap-3">
+              <button onClick={() => setDeleteId(null)} className="btn btn-ghost flex-1">Hủy</button>
+              <button onClick={handleDelete} className="btn flex-1 bg-[var(--danger)] text-white hover:opacity-90">Xoá</button>
+            </div>
+          </div>
         </div>
       )}
     </div>

@@ -1,13 +1,17 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Plus, Wallet, TrendingUp, ArrowDownRight, Trash2, Pencil, X } from "lucide-react";
+import { Plus, Wallet, TrendingUp, ArrowDownRight, Trash2, Pencil, X, AlertTriangle } from "lucide-react";
 import { fmtMoney, fmtMoneyCompact, fmtDate, ACCOUNT_TYPE_LABELS } from "@/lib/utils";
 import { toast } from "sonner";
 
 const INV_TYPE_LABELS: Record<string, string> = {
   GOLD: "Vàng", STOCK: "Cổ phiếu", CRYPTO: "Crypto",
   REAL_ESTATE: "Bất động sản", TERM_DEPOSIT: "Tiết kiệm kỳ hạn", OTHER: "Khác",
+};
+
+const INV_UNIT: Record<string, string> = {
+  GOLD: "chỉ", STOCK: "cổ phiếu", CRYPTO: "coin", REAL_ESTATE: "BĐS", TERM_DEPOSIT: "sổ", OTHER: "đơn vị",
 };
 
 export default function AssetsPage() {
@@ -17,15 +21,47 @@ export default function AssetsPage() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [showInvModal, setShowInvModal] = useState(false);
   const [editInv, setEditInv] = useState<any>(null);
+  const [deleteTarget, setDeleteTarget] = useState<any>(null);
 
   useEffect(() => {
     fetch("/api/accounts").then(r => r.json()).then(d => { if (Array.isArray(d)) setAccounts(d); });
     fetch("/api/investments").then(r => r.json()).then(d => { if (Array.isArray(d)) setInvestments(d); });
   }, []);
 
-  const totalInvested = investments.reduce((s, i) => s + i.buyPrice * i.quantity, 0);
-  const totalCurrentValue = investments.reduce((s, i) => s + i.currentPrice * i.quantity, 0);
+  const holdingInvestments = investments.filter(i => i.status === "holding");
+  const soldInvestments = investments.filter(i => i.status === "sold");
+  const totalInvested = holdingInvestments.reduce((s, i) => s + i.buyPrice * i.quantity, 0);
+  const totalCurrentValue = holdingInvestments.reduce((s, i) => s + i.currentPrice * i.quantity, 0);
   const totalPnL = totalCurrentValue - totalInvested;
+
+  const handleDeleteInvestment = async () => {
+    if (!deleteTarget) return;
+    try {
+      const res = await fetch(`/api/investments/${deleteTarget.id}`, { method: "DELETE" });
+      if (res.ok) {
+        setInvestments(prev => prev.filter(i => i.id !== deleteTarget.id));
+        toast.success("Đã xoá khoản đầu tư");
+      } else {
+        const data = await res.json();
+        toast.error(data.error || "Xoá thất bại");
+      }
+    } catch {
+      toast.error("Lỗi kết nối");
+    }
+    setDeleteTarget(null);
+  };
+
+  const handleMarkSold = async (inv: any) => {
+    const res = await fetch(`/api/investments/${inv.id}`, {
+      method: "PUT", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status: "sold" })
+    });
+    if (res.ok) {
+      const updated = await res.json();
+      setInvestments(prev => prev.map(i => i.id === updated.id ? updated : i));
+      toast.success("Đã đánh dấu đã bán");
+    }
+  };
 
   return (
     <div className="animate-in fade-in duration-500 max-w-5xl mx-auto">
@@ -39,14 +75,11 @@ export default function AssetsPage() {
       <div className="tab-bar inline-flex mb-6">
         {[
           { id: "accounts", icon: Wallet, label: "Tài khoản/Ví" },
-          { id: "investments", icon: TrendingUp, label: `Đầu tư (${investments.length})` },
+          { id: "investments", icon: TrendingUp, label: `Đầu tư (${holdingInvestments.length})` },
           { id: "debts", icon: ArrowDownRight, label: "Vay / Nợ" },
         ].map(tab => (
-          <button
-            key={tab.id}
-            onClick={() => setActiveTab(tab.id)}
-            className={`tab-item flex items-center gap-2 ${activeTab === tab.id ? "active" : ""}`}
-          >
+          <button key={tab.id} onClick={() => setActiveTab(tab.id)}
+            className={`tab-item flex items-center gap-2 ${activeTab === tab.id ? "active" : ""}`}>
             <tab.icon size={16} /> {tab.label}
           </button>
         ))}
@@ -86,81 +119,44 @@ export default function AssetsPage() {
       {/* ═══ INVESTMENTS TAB ═══ */}
       {activeTab === "investments" && (
         <div>
-          {/* Summary */}
-          {investments.length > 0 && (
+          {/* Summary Cards */}
+          {holdingInvestments.length > 0 && (
             <div className="grid grid-cols-3 gap-4 mb-6">
               <div className="card p-4 text-center">
-                <div className="text-xs text-[var(--text-muted)] font-semibold uppercase tracking-wider mb-1">Tổng vốn</div>
-                <div className="text-lg font-bold">{fmtMoneyCompact(totalInvested)}</div>
+                <div className="text-xs text-[var(--text-muted)] font-semibold uppercase tracking-wider mb-1">Tổng vốn đầu tư</div>
+                <div className="text-lg font-bold">{fmtMoney(totalInvested)}</div>
               </div>
               <div className="card p-4 text-center">
                 <div className="text-xs text-[var(--text-muted)] font-semibold uppercase tracking-wider mb-1">Giá trị hiện tại</div>
-                <div className="text-lg font-bold">{fmtMoneyCompact(totalCurrentValue)}</div>
+                <div className="text-lg font-bold">{fmtMoney(totalCurrentValue)}</div>
               </div>
               <div className="card p-4 text-center">
-                <div className="text-xs text-[var(--text-muted)] font-semibold uppercase tracking-wider mb-1">Lãi/Lỗ</div>
+                <div className="text-xs text-[var(--text-muted)] font-semibold uppercase tracking-wider mb-1">Tổng Lãi/Lỗ</div>
                 <div className={`text-lg font-bold ${totalPnL >= 0 ? "text-[var(--success)]" : "text-[var(--danger)]"}`}>
-                  {totalPnL >= 0 ? "+" : ""}{fmtMoneyCompact(totalPnL)}
+                  {totalPnL >= 0 ? "+" : ""}{fmtMoney(totalPnL)}
                 </div>
               </div>
             </div>
           )}
 
-          {investments.length === 0 ? (
-            <EmptyState text="Chưa có khoản đầu tư. Bấm Thêm mới để bắt đầu." />
+          {/* Holding Investments */}
+          {holdingInvestments.length === 0 ? (
+            <EmptyState text="Chưa có khoản đầu tư nào. Bấm Thêm mới để bắt đầu." />
           ) : (
             <div className="space-y-3">
-              {investments.map(inv => {
-                const cost = inv.buyPrice * inv.quantity;
-                const value = inv.currentPrice * inv.quantity;
-                const pnl = value - cost;
-                const pnlPct = cost > 0 ? (pnl / cost * 100) : 0;
-                return (
-                  <div key={inv.id} className="card py-4 px-5 flex items-center gap-4 group hover:border-[var(--accent)] transition-colors">
-                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${
-                      inv.type === "GOLD" ? "bg-yellow-50 text-yellow-600" :
-                      inv.type === "STOCK" ? "bg-blue-50 text-blue-600" :
-                      inv.type === "CRYPTO" ? "bg-purple-50 text-purple-600" :
-                      inv.type === "TERM_DEPOSIT" ? "bg-emerald-50 text-emerald-600" :
-                      "bg-gray-50 text-gray-600"
-                    }`}>
-                      <TrendingUp size={18} />
-                    </div>
+              {holdingInvestments.map(inv => <InvestmentCard key={inv.id} inv={inv}
+                onEdit={() => setEditInv(inv)} onDelete={() => setDeleteTarget(inv)} onMarkSold={() => handleMarkSold(inv)} />)}
+            </div>
+          )}
 
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <span className="font-semibold text-sm">{inv.name}</span>
-                        <span className="text-[10px] px-2 py-0.5 rounded-full bg-[var(--bg-input)] text-[var(--text-muted)] font-medium">
-                          {INV_TYPE_LABELS[inv.type] || inv.type}
-                        </span>
-                      </div>
-                      <div className="text-xs text-[var(--text-muted)] mt-0.5">
-                        {inv.quantity > 1 ? `${inv.quantity} × ` : ""}{fmtMoney(inv.buyPrice)} → {fmtMoney(inv.currentPrice)}
-                      </div>
-                    </div>
-
-                    <div className="text-right flex-shrink-0">
-                      <div className="font-bold text-sm">{fmtMoney(value)}</div>
-                      <div className={`text-xs font-semibold ${pnl >= 0 ? "text-[var(--success)]" : "text-[var(--danger)]"}`}>
-                        {pnl >= 0 ? "+" : ""}{fmtMoneyCompact(pnl)} ({pnlPct >= 0 ? "+" : ""}{pnlPct.toFixed(1)}%)
-                      </div>
-                    </div>
-
-                    <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-all">
-                      <button onClick={() => setEditInv(inv)} className="p-1.5 rounded-lg hover:bg-[var(--bg-input)] text-[var(--text-muted)] hover:text-[var(--accent)]" title="Cập nhật giá">
-                        <Pencil size={14} />
-                      </button>
-                      <button onClick={async () => {
-                        if (!confirm("Xoá khoản đầu tư này?")) return;
-                        const res = await fetch(`/api/investments/${inv.id}`, { method: "DELETE" });
-                        if (res.ok) { setInvestments(prev => prev.filter(i => i.id !== inv.id)); toast.success("Đã xoá"); }
-                      }} className="p-1.5 rounded-lg hover:bg-[var(--danger-bg)] text-[var(--text-muted)] hover:text-[var(--danger)]" title="Xoá">
-                        <Trash2 size={14} />
-                      </button>
-                    </div>
-                  </div>
-                );
-              })}
+          {/* Sold Investments */}
+          {soldInvestments.length > 0 && (
+            <div className="mt-8">
+              <h3 className="text-sm font-semibold text-[var(--text-muted)] uppercase tracking-wider mb-3">Đã bán / Đã tất toán</h3>
+              <div className="space-y-2">
+                {soldInvestments.map(inv => <InvestmentCard key={inv.id} inv={inv} sold
+                  onEdit={() => setEditInv(inv)} onDelete={() => setDeleteTarget(inv)} />)}
+              </div>
             </div>
           )}
         </div>
@@ -169,17 +165,120 @@ export default function AssetsPage() {
       {/* ═══ DEBTS TAB ═══ */}
       {activeTab === "debts" && <EmptyState text="Chức năng quản lý nợ sẽ sớm được bổ sung." />}
 
-      {/* ═══ ADD ACCOUNT MODAL ═══ */}
+      {/* ═══ MODALS ═══ */}
       {showAddModal && <AddAccountModal onClose={() => setShowAddModal(false)} onCreated={(acc: any) => { setAccounts(prev => [...prev, acc]); setShowAddModal(false); }} />}
-
-      {/* ═══ ADD INVESTMENT MODAL ═══ */}
       {showInvModal && <AddInvestmentModal onClose={() => setShowInvModal(false)} onCreated={(inv: any) => { setInvestments(prev => [inv, ...prev]); setShowInvModal(false); }} />}
+      {editInv && <EditInvestmentModal inv={editInv} onClose={() => setEditInv(null)} onUpdated={(updated: any) => { setInvestments(prev => prev.map(i => i.id === updated.id ? updated : i)); setEditInv(null); }} />}
 
-      {/* ═══ EDIT INVESTMENT MODAL ═══ */}
-      {editInv && <EditInvestmentModal inv={editInv} onClose={() => setEditInv(null)} onUpdated={(updated: any) => {
-        setInvestments(prev => prev.map(i => i.id === updated.id ? updated : i));
-        setEditInv(null);
-      }} />}
+      {/* ═══ DELETE CONFIRM MODAL ═══ */}
+      {deleteTarget && (
+        <div className="modal-overlay" onClick={() => setDeleteTarget(null)}>
+          <div className="modal-content max-w-sm" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-xl bg-red-50 text-red-600 flex items-center justify-center flex-shrink-0">
+                <AlertTriangle size={20} />
+              </div>
+              <div>
+                <h3 className="font-bold">Xác nhận xoá</h3>
+                <p className="text-sm text-[var(--text-muted)]">Xoá &quot;{deleteTarget.name}&quot;?</p>
+              </div>
+            </div>
+            <p className="text-sm text-[var(--text-muted)] mb-6">
+              Hành động này không thể hoàn tác. Dữ liệu lãi/lỗ của khoản đầu tư sẽ bị xoá vĩnh viễn.
+            </p>
+            <div className="flex gap-3">
+              <button onClick={() => setDeleteTarget(null)} className="btn btn-ghost flex-1">Hủy</button>
+              <button onClick={handleDeleteInvestment} className="btn flex-1 bg-[var(--danger)] text-white hover:opacity-90">Xoá</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ═══ INVESTMENT CARD ═══ */
+function InvestmentCard({ inv, sold, onEdit, onDelete, onMarkSold }: {
+  inv: any; sold?: boolean; onEdit: () => void; onDelete: () => void; onMarkSold?: () => void;
+}) {
+  const cost = inv.buyPrice * inv.quantity;
+  const value = inv.currentPrice * inv.quantity;
+  const pnl = value - cost;
+  const pnlPct = cost > 0 ? (pnl / cost * 100) : 0;
+  const unit = INV_UNIT[inv.type] || "đơn vị";
+
+  return (
+    <div className={`card p-5 group transition-colors ${sold ? "opacity-60" : "hover:border-[var(--accent)]"}`}>
+      <div className="flex items-start gap-4">
+        {/* Icon */}
+        <div className={`w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0 ${
+          inv.type === "GOLD" ? "bg-yellow-50 text-yellow-600" :
+          inv.type === "STOCK" ? "bg-blue-50 text-blue-600" :
+          inv.type === "CRYPTO" ? "bg-purple-50 text-purple-600" :
+          inv.type === "TERM_DEPOSIT" ? "bg-emerald-50 text-emerald-600" :
+          inv.type === "REAL_ESTATE" ? "bg-orange-50 text-orange-600" :
+          "bg-gray-50 text-gray-600"
+        }`}>
+          <TrendingUp size={18} />
+        </div>
+
+        {/* Info */}
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 mb-2">
+            <span className="font-bold text-sm">{inv.name}</span>
+            <span className="text-[10px] px-2 py-0.5 rounded-full bg-[var(--bg-input)] text-[var(--text-muted)] font-semibold uppercase">
+              {INV_TYPE_LABELS[inv.type] || inv.type}
+            </span>
+            {sold && <span className="text-[10px] px-2 py-0.5 rounded-full bg-red-50 text-red-600 font-semibold">Đã bán</span>}
+          </div>
+
+          {/* Detail Grid */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-x-6 gap-y-1 text-xs">
+            <div>
+              <span className="text-[var(--text-muted)]">Khối lượng</span>
+              <div className="font-semibold">{inv.quantity} {unit}</div>
+            </div>
+            <div>
+              <span className="text-[var(--text-muted)]">Giá mua</span>
+              <div className="font-semibold">{fmtMoney(inv.buyPrice)}/{unit}</div>
+            </div>
+            <div>
+              <span className="text-[var(--text-muted)]">Giá hiện tại</span>
+              <div className="font-semibold">{fmtMoney(inv.currentPrice)}/{unit}</div>
+            </div>
+            <div>
+              <span className="text-[var(--text-muted)]">Tổng vốn</span>
+              <div className="font-semibold">{fmtMoney(cost)}</div>
+            </div>
+          </div>
+
+          {inv.note && <div className="text-xs text-[var(--text-muted)] mt-2 italic">{inv.note}</div>}
+        </div>
+
+        {/* Right: Value + PnL + Actions */}
+        <div className="text-right flex-shrink-0">
+          <div className="font-bold text-base">{fmtMoney(value)}</div>
+          <div className={`text-xs font-semibold ${pnl >= 0 ? "text-[var(--success)]" : "text-[var(--danger)]"}`}>
+            {pnl >= 0 ? "+" : ""}{fmtMoney(pnl)}
+            <span className="ml-1">({pnlPct >= 0 ? "+" : ""}{pnlPct.toFixed(1)}%)</span>
+          </div>
+
+          {/* Actions */}
+          <div className="flex gap-1 mt-3 justify-end opacity-0 group-hover:opacity-100 transition-all">
+            {!sold && onMarkSold && (
+              <button onClick={onMarkSold} className="text-[10px] px-2 py-1 rounded-lg bg-[var(--bg-input)] text-[var(--text-muted)] hover:text-[var(--warning)] hover:bg-yellow-50 transition-colors font-medium">
+                Đã bán
+              </button>
+            )}
+            <button onClick={onEdit} className="p-1.5 rounded-lg hover:bg-[var(--bg-input)] text-[var(--text-muted)] hover:text-[var(--accent)] transition-colors" title="Sửa">
+              <Pencil size={14} />
+            </button>
+            <button onClick={onDelete} className="p-1.5 rounded-lg hover:bg-red-50 text-[var(--text-muted)] hover:text-[var(--danger)] transition-colors" title="Xoá">
+              <Trash2 size={14} />
+            </button>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
@@ -233,8 +332,10 @@ function AddAccountModal({ onClose, onCreated }: { onClose: () => void; onCreate
 
 /* ═══ ADD INVESTMENT MODAL ═══ */
 function AddInvestmentModal({ onClose, onCreated }: { onClose: () => void; onCreated: (inv: any) => void }) {
-  const [form, setForm] = useState({ name: "", type: "STOCK", buyPrice: "", currentPrice: "", quantity: "1", note: "" });
+  const [form, setForm] = useState({ name: "", type: "GOLD", buyPrice: "", currentPrice: "", quantity: "1", note: "" });
   const [loading, setLoading] = useState(false);
+
+  const unit = INV_UNIT[form.type] || "đơn vị";
 
   const handleSubmit = async () => {
     if (!form.name || !form.buyPrice) { toast.error("Nhập tên và giá mua"); return; }
@@ -255,28 +356,39 @@ function AddInvestmentModal({ onClose, onCreated }: { onClose: () => void; onCre
         </div>
         <div className="grid grid-cols-2 gap-4">
           <div className="form-group col-span-2"><label className="form-label">Tên khoản đầu tư</label>
-            <input className="input" placeholder="VD: VNINDEX ETF, Vàng SJC..." value={form.name} onChange={e => setForm({...form, name: e.target.value})} />
+            <input className="input" placeholder={form.type === "GOLD" ? "VD: Vàng SJC 9999" : "VD: VNM, Bitcoin..."} value={form.name} onChange={e => setForm({...form, name: e.target.value})} />
           </div>
-          <div className="form-group"><label className="form-label">Loại</label>
+          <div className="form-group"><label className="form-label">Loại đầu tư</label>
             <select className="input" value={form.type} onChange={e => setForm({...form, type: e.target.value})}>
-              <option value="STOCK">Cổ phiếu</option><option value="GOLD">Vàng</option>
-              <option value="CRYPTO">Crypto</option><option value="TERM_DEPOSIT">Tiết kiệm kỳ hạn</option>
-              <option value="REAL_ESTATE">Bất động sản</option><option value="OTHER">Khác</option>
+              <option value="GOLD">🥇 Vàng</option><option value="STOCK">📈 Cổ phiếu</option>
+              <option value="CRYPTO">₿ Crypto</option><option value="TERM_DEPOSIT">🏦 Tiết kiệm kỳ hạn</option>
+              <option value="REAL_ESTATE">🏠 Bất động sản</option><option value="OTHER">📦 Khác</option>
             </select>
           </div>
-          <div className="form-group"><label className="form-label">Số lượng</label>
-            <input className="input" type="number" step="any" value={form.quantity} onChange={e => setForm({...form, quantity: e.target.value})} />
+          <div className="form-group"><label className="form-label">Khối lượng ({unit})</label>
+            <input className="input" type="number" step="any" min="0" placeholder="VD: 5" value={form.quantity} onChange={e => setForm({...form, quantity: e.target.value})} />
           </div>
-          <div className="form-group"><label className="form-label">Giá mua (VNĐ)</label>
-            <input className="input" type="number" placeholder="0" value={form.buyPrice} onChange={e => setForm({...form, buyPrice: e.target.value})} />
+          <div className="form-group"><label className="form-label">Giá mua / {unit} (VNĐ)</label>
+            <input className="input" type="number" placeholder="VD: 9.200.000" value={form.buyPrice} onChange={e => setForm({...form, buyPrice: e.target.value})} />
           </div>
-          <div className="form-group"><label className="form-label">Giá hiện tại (VNĐ)</label>
-            <input className="input" type="number" placeholder="Bằng giá mua" value={form.currentPrice} onChange={e => setForm({...form, currentPrice: e.target.value})} />
+          <div className="form-group"><label className="form-label">Giá hiện tại / {unit} (VNĐ)</label>
+            <input className="input" type="number" placeholder="Bằng giá mua nếu bỏ trống" value={form.currentPrice} onChange={e => setForm({...form, currentPrice: e.target.value})} />
           </div>
-          <div className="form-group col-span-2"><label className="form-label">Ghi chú</label>
-            <input className="input" placeholder="Tuỳ chọn" value={form.note} onChange={e => setForm({...form, note: e.target.value})} />
+          <div className="form-group col-span-2"><label className="form-label">Ghi chú (tuỳ chọn)</label>
+            <input className="input" placeholder="VD: Mua tại SJC Q1" value={form.note} onChange={e => setForm({...form, note: e.target.value})} />
           </div>
         </div>
+
+        {/* Preview */}
+        {form.buyPrice && (
+          <div className="mt-4 p-3 rounded-xl bg-[var(--bg-input)] text-xs space-y-1">
+            <div className="flex justify-between"><span className="text-[var(--text-muted)]">Tổng vốn</span><span className="font-bold">{fmtMoney((parseFloat(form.buyPrice) || 0) * (parseFloat(form.quantity) || 1))}</span></div>
+            {form.currentPrice && (
+              <div className="flex justify-between"><span className="text-[var(--text-muted)]">Giá trị hiện tại</span><span className="font-bold">{fmtMoney((parseFloat(form.currentPrice) || 0) * (parseFloat(form.quantity) || 1))}</span></div>
+            )}
+          </div>
+        )}
+
         <div className="flex gap-3 mt-6"><button onClick={onClose} className="btn btn-ghost flex-1">Hủy</button><button onClick={handleSubmit} disabled={loading} className="btn btn-primary flex-1">{loading ? "Đang tạo..." : "Thêm đầu tư"}</button></div>
       </div>
     </div>
@@ -286,13 +398,19 @@ function AddInvestmentModal({ onClose, onCreated }: { onClose: () => void; onCre
 /* ═══ EDIT INVESTMENT MODAL ═══ */
 function EditInvestmentModal({ inv, onClose, onUpdated }: { inv: any; onClose: () => void; onUpdated: (inv: any) => void }) {
   const [currentPrice, setCurrentPrice] = useState(inv.currentPrice.toString());
+  const [quantity, setQuantity] = useState(inv.quantity.toString());
   const [loading, setLoading] = useState(false);
+  const unit = INV_UNIT[inv.type] || "đơn vị";
+
+  const newValue = (parseFloat(currentPrice) || 0) * (parseFloat(quantity) || 0);
+  const cost = inv.buyPrice * (parseFloat(quantity) || inv.quantity);
+  const pnl = newValue - cost;
 
   const handleSubmit = async () => {
     setLoading(true);
     const res = await fetch(`/api/investments/${inv.id}`, { method: "PUT", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ currentPrice: parseFloat(currentPrice) }) });
-    if (res.ok) { toast.success("Đã cập nhật giá"); onUpdated(await res.json()); }
+      body: JSON.stringify({ currentPrice: parseFloat(currentPrice), quantity: parseFloat(quantity) }) });
+    if (res.ok) { toast.success("Đã cập nhật"); onUpdated(await res.json()); }
     else toast.error("Cập nhật thất bại");
     setLoading(false);
   };
@@ -301,13 +419,31 @@ function EditInvestmentModal({ inv, onClose, onUpdated }: { inv: any; onClose: (
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal-content" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between mb-6">
-          <h2 className="text-lg font-bold">Cập nhật giá: {inv.name}</h2>
+          <h2 className="text-lg font-bold">Cập nhật: {inv.name}</h2>
           <button onClick={onClose} className="text-[var(--text-muted)] hover:text-[var(--text-primary)]"><X size={20} /></button>
         </div>
-        <div className="text-sm text-[var(--text-muted)] mb-4">Giá mua: {fmtMoney(inv.buyPrice)} × {inv.quantity}</div>
-        <div className="form-group"><label className="form-label">Giá hiện tại (VNĐ)</label>
-          <input className="input text-xl font-bold" type="number" value={currentPrice} onChange={e => setCurrentPrice(e.target.value)} autoFocus />
+
+        <div className="p-3 rounded-xl bg-[var(--bg-input)] text-xs mb-4 space-y-1">
+          <div className="flex justify-between"><span className="text-[var(--text-muted)]">Loại</span><span className="font-semibold">{INV_TYPE_LABELS[inv.type]}</span></div>
+          <div className="flex justify-between"><span className="text-[var(--text-muted)]">Giá mua</span><span className="font-semibold">{fmtMoney(inv.buyPrice)}/{unit}</span></div>
         </div>
+
+        <div className="grid grid-cols-2 gap-4">
+          <div className="form-group"><label className="form-label">Khối lượng ({unit})</label>
+            <input className="input" type="number" step="any" value={quantity} onChange={e => setQuantity(e.target.value)} />
+          </div>
+          <div className="form-group"><label className="form-label">Giá hiện tại / {unit}</label>
+            <input className="input text-lg font-bold" type="number" value={currentPrice} onChange={e => setCurrentPrice(e.target.value)} autoFocus />
+          </div>
+        </div>
+
+        <div className="mt-4 p-3 rounded-xl bg-[var(--bg-input)] text-xs space-y-1">
+          <div className="flex justify-between"><span className="text-[var(--text-muted)]">Giá trị mới</span><span className="font-bold">{fmtMoney(newValue)}</span></div>
+          <div className="flex justify-between"><span className="text-[var(--text-muted)]">Lãi/Lỗ</span>
+            <span className={`font-bold ${pnl >= 0 ? "text-[var(--success)]" : "text-[var(--danger)]"}`}>{pnl >= 0 ? "+" : ""}{fmtMoney(pnl)}</span>
+          </div>
+        </div>
+
         <div className="flex gap-3 mt-6"><button onClick={onClose} className="btn btn-ghost flex-1">Hủy</button><button onClick={handleSubmit} disabled={loading} className="btn btn-primary flex-1">{loading ? "Đang lưu..." : "Cập nhật"}</button></div>
       </div>
     </div>
