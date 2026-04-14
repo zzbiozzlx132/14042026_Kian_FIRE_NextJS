@@ -63,15 +63,25 @@ export async function GET() {
 
     // ═══ 4. TOTAL NET WORTH (all accounts + investments + physical assets) ═══
     const accounts = await prisma.account.findMany();
-    let totalCash = 0;
-    accounts.forEach((a: any) => {
-      if (a.type !== "CREDIT_CARD") totalCash += a.initialBalance;
-    });
+    const balances: Record<string, number> = {};
+    accounts.forEach((a: any) => { balances[a.id] = a.initialBalance; });
 
-    // Apply transactions to account balances
+    // Apply all transactions to account balances
     const allTx = await prisma.transaction.findMany();
     allTx.forEach((tx: any) => {
-      // simplified - just use account initial balance for now
+      if (tx.type === "EXPENSE" && tx.fromAccountId) {
+        balances[tx.fromAccountId] = (balances[tx.fromAccountId] || 0) - tx.amount;
+      } else if (tx.type === "INCOME" && tx.fromAccountId) {
+        balances[tx.fromAccountId] = (balances[tx.fromAccountId] || 0) + tx.amount;
+      } else if (tx.type === "TRANSFER" && tx.fromAccountId && tx.toAccountId) {
+        balances[tx.fromAccountId] = (balances[tx.fromAccountId] || 0) - tx.amount;
+        balances[tx.toAccountId] = (balances[tx.toAccountId] || 0) + tx.amount;
+      }
+    });
+
+    let totalCash = 0;
+    accounts.forEach((a: any) => {
+      if (a.type !== "CREDIT_CARD") totalCash += (balances[a.id] || 0);
     });
 
     const totalNetWorth = totalCash + totalCurrentValue;

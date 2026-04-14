@@ -294,23 +294,75 @@ function CategoriesPanel() {
 
 /* ═══════ PROFILE PANEL ═══════ */
 function ProfilePanel() {
+  const [user, setUser] = useState<any>(null);
+  const [name, setName] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [savingPw, setSavingPw] = useState(false);
+
+  useEffect(() => {
+    fetch("/api/users").then(r => r.json()).then(d => {
+      if (Array.isArray(d) && d.length > 0) {
+        // Find from session or first admin
+        const admin = d.find((u: any) => u.role === "ADMIN") || d[0];
+        setUser(admin);
+        setName(admin.name || "");
+      }
+    });
+  }, []);
+
+  const handleSaveName = async () => {
+    if (!user || !name) return;
+    setSaving(true);
+    const res = await fetch(`/api/users/${user.id}`, {
+      method: "PATCH", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name }),
+    });
+    if (res.ok) {
+      const updated = await res.json();
+      setUser(updated);
+      toast.success("Đã cập nhật tên");
+    } else toast.error("Cập nhật thất bại");
+    setSaving(false);
+  };
+
+  const handleChangePassword = async () => {
+    if (!user || !newPassword) { toast.error("Nhập mật khẩu mới"); return; }
+    if (newPassword.length < 6) { toast.error("Mật khẩu tối thiểu 6 ký tự"); return; }
+    setSavingPw(true);
+    const res = await fetch(`/api/users/${user.id}`, {
+      method: "PATCH", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ password: newPassword }),
+    });
+    if (res.ok) { setNewPassword(""); toast.success("Đã đổi mật khẩu"); }
+    else toast.error("Đổi mật khẩu thất bại");
+    setSavingPw(false);
+  };
+
   return (
     <div className="card">
       <h3 className="section-label mb-6">Thông tin tài khoản</h3>
       <div className="space-y-6">
         <div className="form-group">
           <label className="form-label">Tên hiển thị</label>
-          <input type="text" className="input max-w-md" defaultValue="Kian" />
+          <div className="flex gap-3 max-w-md">
+            <input type="text" className="input flex-1" value={name} onChange={e => setName(e.target.value)} />
+            <button onClick={handleSaveName} disabled={saving || name === user?.name} className="btn btn-primary text-sm py-2">
+              {saving ? "Lưu..." : "Lưu"}
+            </button>
+          </div>
         </div>
         <div className="form-group">
           <label className="form-label">Email đăng nhập</label>
-          <input type="email" className="input max-w-md opacity-60" defaultValue="admin@kiantr.com" disabled />
+          <input type="email" className="input max-w-md opacity-60" value={user?.email || ""} disabled />
         </div>
         <div className="pt-4 border-t border-[var(--border)]">
           <label className="form-label mb-3">Đổi mật khẩu</label>
           <div className="flex gap-3 max-w-md">
-            <input type="password" className="input flex-1" placeholder="Mật khẩu mới" />
-            <button className="btn btn-primary text-sm py-2">Lưu</button>
+            <input type="password" className="input flex-1" placeholder="Mật khẩu mới (tối thiểu 6 ký tự)" value={newPassword} onChange={e => setNewPassword(e.target.value)} />
+            <button onClick={handleChangePassword} disabled={savingPw || !newPassword} className="btn btn-primary text-sm py-2">
+              {savingPw ? "Đang lưu..." : "Đổi"}
+            </button>
           </div>
         </div>
       </div>

@@ -38,13 +38,24 @@ export default function AssetsPage() {
   const handleDeleteInvestment = async () => {
     if (!deleteTarget) return;
     try {
-      const res = await fetch(`/api/investments/${deleteTarget.id}`, { method: "DELETE" });
-      if (res.ok) {
-        setInvestments(prev => prev.filter(i => i.id !== deleteTarget.id));
-        toast.success("Đã xoá khoản đầu tư");
+      if (deleteTarget._type === "account") {
+        const res = await fetch(`/api/accounts?id=${deleteTarget.id}`, { method: "DELETE" });
+        if (res.ok) {
+          setAccounts(prev => prev.filter(a => a.id !== deleteTarget.id));
+          toast.success("Đã xoá tài khoản");
+        } else {
+          const data = await res.json();
+          toast.error(data.error || "Xoá thất bại");
+        }
       } else {
-        const data = await res.json();
-        toast.error(data.error || "Xoá thất bại");
+        const res = await fetch(`/api/investments/${deleteTarget.id}`, { method: "DELETE" });
+        if (res.ok) {
+          setInvestments(prev => prev.filter(i => i.id !== deleteTarget.id));
+          toast.success("Đã xoá khoản đầu tư");
+        } else {
+          const data = await res.json();
+          toast.error(data.error || "Xoá thất bại");
+        }
       }
     } catch {
       toast.error("Lỗi kết nối");
@@ -97,7 +108,7 @@ export default function AssetsPage() {
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {accounts.map(acc => (
-                <div key={acc.id} className="card p-5 hover:border-[var(--accent)] transition-colors">
+                <div key={acc.id} className="card p-5 hover:border-[var(--accent)] transition-colors group relative">
                   <div className="flex justify-between items-start mb-4">
                     <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${
                       acc.type === "CREDIT_CARD" ? "bg-red-50 text-red-600" :
@@ -107,9 +118,16 @@ export default function AssetsPage() {
                     }`}>
                       <Wallet size={20} />
                     </div>
-                    <span className="text-[10px] font-semibold px-2 py-1 rounded-full bg-[var(--bg-input)] text-[var(--text-muted)] uppercase tracking-wider">
-                      {ACCOUNT_TYPE_LABELS[acc.type] || acc.type}
-                    </span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-[10px] font-semibold px-2 py-1 rounded-full bg-[var(--bg-input)] text-[var(--text-muted)] uppercase tracking-wider">
+                        {ACCOUNT_TYPE_LABELS[acc.type] || acc.type}
+                      </span>
+                      <button onClick={async () => {
+                        setDeleteTarget({ ...acc, _type: "account" });
+                      }} className="opacity-0 group-hover:opacity-100 p-1 rounded-lg hover:bg-red-50 text-[var(--text-muted)] hover:text-[var(--danger)] transition-all" title="Xoá">
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
                   </div>
                   <h3 className="font-semibold mb-1">{acc.name}</h3>
                   <div className="text-2xl font-bold">{fmtMoney(acc.initialBalance)}</div>

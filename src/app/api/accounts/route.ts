@@ -38,3 +38,26 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Thêm tài khoản thất bại" }, { status: 400 });
   }
 }
+
+export async function DELETE(req: Request) {
+  const session = await auth();
+  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  try {
+    const { searchParams } = new URL(req.url);
+    const id = searchParams.get("id");
+    if (!id) return NextResponse.json({ error: "Missing id" }, { status: 400 });
+
+    const txCount = await prisma.transaction.count({
+      where: { OR: [{ fromAccountId: id }, { toAccountId: id }] }
+    });
+    if (txCount > 0) {
+      return NextResponse.json({ error: `Không thể xoá: có ${txCount} giao dịch đang dùng tài khoản này` }, { status: 400 });
+    }
+
+    await prisma.account.delete({ where: { id } });
+    return NextResponse.json({ ok: true });
+  } catch (error) {
+    return NextResponse.json({ error: "Xoá tài khoản thất bại" }, { status: 400 });
+  }
+}
