@@ -25,13 +25,16 @@ WORKDIR /app
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 
-# Copy Prisma for migrations + seed
+# Copy FULL node_modules for prisma CLI + seed
+COPY --from=deps /app/node_modules ./node_modules
+
+# Copy Prisma schema
 COPY --from=builder /app/prisma ./prisma
 COPY --from=builder /app/package.json ./package.json
+
+# Overwrite with generated prisma client from builder
 COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
-COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
-COPY --from=builder /app/node_modules/prisma ./node_modules/prisma
-COPY --from=builder /app/node_modules/bcryptjs ./node_modules/bcryptjs
+COPY --from=builder /app/node_modules/@prisma/client ./node_modules/@prisma/client
 
 # Copy app
 COPY --from=builder /app/public ./public
@@ -46,5 +49,4 @@ EXPOSE 3000
 ENV PORT=3000
 ENV HOSTNAME="0.0.0.0"
 
-# Run as root so prisma db push can work, then exec node
 ENTRYPOINT ["./docker-entrypoint.sh"]
