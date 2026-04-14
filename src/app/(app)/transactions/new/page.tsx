@@ -285,7 +285,7 @@ export default function NewTransactionPage() {
                       type="button"
                       onClick={() => setRating("WORTHY")}
                       className={cn("flex-1 py-1 px-2 rounded hover:bg-[var(--bg-input)] text-xs text-center border transition-all", rating === "WORTHY" ? "border-[var(--success)] text-[var(--success)] font-bold" : "border-transparent text-[var(--text-muted)]")}
-                    >Xố đáng</button>
+                    >Xứng đáng</button>
                     <button
                       type="button"
                       onClick={() => setRating("NORMAL")}

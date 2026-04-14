@@ -131,6 +131,9 @@ export async function GET(req: Request) {
 
   } catch (error) {
     console.error("Dashboard API Error:", error);
-    return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
+    return NextResponse.json({
+      netWorth: 0, totalAssets: 0, totalDebt: 0, totalCredit: 0,
+      totalInvest: 0, monthlyIncome: 0, monthlyExpense: 0, recentTransactions: []
+    });
   }
 }
