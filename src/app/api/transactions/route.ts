@@ -54,22 +54,22 @@ export async function POST(req: Request) {
 
     const tx = await prisma.transaction.create({
       data: {
-        date: body.date,
+        date: new Date(body.date),
         type: body.type,
         amount: body.amount,
         fromAccountId: body.fromAccountId || null,
         toAccountId: body.toAccountId || null,
         categoryId: body.categoryId || null,
         description: body.description || "",
-        essential: body.type === "EXPENSE" ? (body.essential || "NON_ESSENTIAL") : "NON_ESSENTIAL",
-        rating: body.type === "EXPENSE" ? (body.rating || "NORMAL") : "NORMAL",
+        essential: body.type === "EXPENSE" ? (body.essential || "NON_ESSENTIAL") : null,
+        rating: body.type === "EXPENSE" ? (body.rating || "NORMAL") : null,
         createdById: session.user?.id || ""
       }
     });
 
     return NextResponse.json(tx, { status: 201 });
-  } catch (error) {
-    console.error("Add Tx Error:", error);
-    return NextResponse.json({ error: "Lỗi tạo giao dịch" }, { status: 400 });
+  } catch (error: any) {
+    console.error("Add Tx Error:", error?.message || error);
+    return NextResponse.json({ error: error?.message || "Lỗi tạo giao dịch" }, { status: 400 });
   }
 }
