@@ -55,13 +55,14 @@ export default function TransactionsPage() {
       {/* Search */}
       <div className="card mb-6 p-3">
         <div className="relative">
-          <div className="absolute inset-y-0 left-3 flex items-center pointer-events-none text-[var(--text-muted)]">
+          <div className="absolute inset-y-0 left-4 flex items-center pointer-events-none text-[var(--text-muted)]">
             <Search size={16} />
           </div>
           <input
             type="text"
             placeholder="Tìm theo ghi chú, hạng mục..."
-            className="input w-full pl-10"
+            className="input w-full"
+            style={{ paddingLeft: '44px' }}
             value={search}
             onChange={e => setSearch(e.target.value)}
           />
