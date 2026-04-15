@@ -12,6 +12,8 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [resetMode, setResetMode] = useState(false);
+  const [resetSuccess, setResetSuccess] = useState("");
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -37,6 +39,34 @@ export default function LoginPage() {
     }
   };
 
+  const handleResetPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!email) {
+      setError("Vui lòng nhập email");
+      return;
+    }
+    setLoading(true);
+    setError("");
+    setResetSuccess("");
+
+    try {
+      const res = await fetch("/api/auth/reset-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setResetSuccess(data.message);
+      } else {
+        setError(data.error || "Có lỗi xảy ra");
+      }
+    } catch {
+      setError("Lỗi kết nối server");
+    }
+    setLoading(false);
+  };
+
   return (
     <div className="login-page">
       <div className="login-bg">
@@ -57,73 +87,125 @@ export default function LoginPage() {
           </div>
 
           {/* Form */}
-          <form onSubmit={handleLogin} className="login-form">
-            <div className="form-group">
-              <label className="form-label">Email</label>
-              <input
-                type="email"
-                className="input"
-                placeholder="kian@example.com"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                autoComplete="email"
-                autoFocus
-              />
-            </div>
-
-            <div className="form-group">
-              <label className="form-label">Mật khẩu</label>
-              <div style={{ position: "relative" }}>
+          {resetMode ? (
+            <form onSubmit={handleResetPassword} className="login-form">
+              <div className="form-group">
+                <label className="form-label">Email đã đăng ký</label>
                 <input
-                  type={showPassword ? "text" : "password"}
+                  type="email"
                   className="input"
-                  placeholder="••••••••"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  autoComplete="current-password"
-                  style={{ paddingRight: 44 }}
+                  placeholder="kian@example.com"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  autoComplete="email"
+                  autoFocus
                 />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  style={{
-                    position: "absolute",
-                    right: 12,
-                    top: "50%",
-                    transform: "translateY(-50%)",
-                    background: "none",
-                    border: "none",
-                    color: "var(--text-muted)",
-                    cursor: "pointer",
-                    padding: 4,
-                  }}
-                >
-                  {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
-                </button>
               </div>
-            </div>
 
-            {error && (
-              <div className="login-error">
-                {error}
-              </div>
-            )}
-
-            <button
-              type="submit"
-              className="btn btn-primary login-btn"
-              disabled={loading}
-            >
-              {loading ? (
-                <span className="login-spinner" />
-              ) : (
-                <>
-                  Đăng nhập
-                  <ArrowRight size={18} />
-                </>
+              {error && (
+                <div className="login-error">{error}</div>
               )}
-            </button>
-          </form>
+              {resetSuccess && (
+                <div style={{ color: 'var(--success)', fontSize: 14, margin: '8px 0', padding: '10px 14px', background: 'var(--success-bg)', borderRadius: 10, textAlign: 'center' }}>
+                  {resetSuccess}
+                </div>
+              )}
+
+              <button
+                type="submit"
+                className="btn btn-primary login-btn"
+                disabled={loading}
+              >
+                {loading ? (
+                  <span className="login-spinner" />
+                ) : (
+                  "Đặt lại mật khẩu"
+                )}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => { setResetMode(false); setError(""); setResetSuccess(""); }}
+                style={{ background: 'none', border: 'none', color: 'var(--accent)', cursor: 'pointer', fontSize: 14, marginTop: 12, textAlign: 'center', width: '100%' }}
+              >
+                ← Quay lại đăng nhập
+              </button>
+            </form>
+          ) : (
+            <form onSubmit={handleLogin} className="login-form">
+              <div className="form-group">
+                <label className="form-label">Email</label>
+                <input
+                  type="email"
+                  className="input"
+                  placeholder="kian@example.com"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  autoComplete="email"
+                  autoFocus
+                />
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">Mật khẩu</label>
+                <div style={{ position: "relative" }}>
+                  <input
+                    type={showPassword ? "text" : "password"}
+                    className="input"
+                    placeholder="••••••••"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    autoComplete="current-password"
+                    style={{ paddingRight: 44 }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    style={{
+                      position: "absolute",
+                      right: 12,
+                      top: "50%",
+                      transform: "translateY(-50%)",
+                      background: "none",
+                      border: "none",
+                      color: "var(--text-muted)",
+                      cursor: "pointer",
+                      padding: 4,
+                    }}
+                  >
+                    {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                  </button>
+                </div>
+              </div>
+
+              {error && (
+                <div className="login-error">{error}</div>
+              )}
+
+              <button
+                type="submit"
+                className="btn btn-primary login-btn"
+                disabled={loading}
+              >
+                {loading ? (
+                  <span className="login-spinner" />
+                ) : (
+                  <>
+                    Đăng nhập
+                    <ArrowRight size={18} />
+                  </>
+                )}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => { setResetMode(true); setError(""); }}
+                style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: 13, marginTop: 12, textAlign: 'center', width: '100%' }}
+              >
+                Quên mật khẩu?
+              </button>
+            </form>
+          )}
 
           {/* Footer */}
           <div className="login-footer">
