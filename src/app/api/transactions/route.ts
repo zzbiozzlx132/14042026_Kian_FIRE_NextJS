@@ -43,13 +43,19 @@ export async function POST(req: Request) {
         return NextResponse.json({ error: "Số tiền không hợp lệ" }, { status: 400 });
     }
 
-    // Validation Smart Rules / Kian Filter 3: Check Balance validity for Cash
-    if (body.type === "EXPENSE" || body.type === "TRANSFER") {
-       if (body.fromAccountId && body.amount > 0) {
-          // If we had the exact real time balance, we could block it here.
-          // But to avoid performance hits on a single transaction creation, we allow it,
-          // usually the front-end will check the current context balance.
-       }
+    // Block if insufficient balance (non-credit-card accounts)
+    if ((body.type === "EXPENSE" || body.type === "TRANSFER") && body.fromAccountId) {
+      const account = await prisma.account.findUnique({ where: { id: body.fromAccountId } });
+      if (account && account.type !== "CREDIT_CARD") {
+        const incoming = await prisma.transaction.aggregate({ _sum: { amount: true }, where: { toAccountId: account.id } });
+        const outgoing = await prisma.transaction.aggregate({ _sum: { amount: true }, where: { fromAccountId: account.id } });
+        const currentBalance = account.initialBalance + (incoming._sum.amount || 0) - (outgoing._sum.amount || 0);
+        if (body.amount > currentBalance) {
+          return NextResponse.json({
+            error: `Số dư ${account.name} không đủ. Hiện có: ${Math.round(currentBalance).toLocaleString("vi-VN")}đ, cần: ${Math.round(body.amount).toLocaleString("vi-VN")}đ`
+          }, { status: 400 });
+        }
+      }
     }
 
     const tx = await prisma.transaction.create({
