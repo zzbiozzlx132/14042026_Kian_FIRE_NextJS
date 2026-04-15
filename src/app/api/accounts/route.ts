@@ -9,7 +9,43 @@ export async function GET() {
   const accounts = await prisma.account.findMany({
     orderBy: { createdAt: "asc" }
   });
-  return NextResponse.json(accounts);
+
+  // Compute real balance for each account
+  const enriched = await Promise.all(accounts.map(async (acc) => {
+    const incoming = await prisma.transaction.aggregate({
+      _sum: { amount: true },
+      where: { toAccountId: acc.id },
+    });
+    const outgoing = await prisma.transaction.aggregate({
+      _sum: { amount: true },
+      where: { fromAccountId: acc.id },
+    });
+
+    const totalIn = incoming._sum.amount || 0;
+    const totalOut = outgoing._sum.amount || 0;
+
+    if (acc.type === "CREDIT_CARD") {
+      // Credit card: nợ đang dùng = chi tiêu - đã trả
+      // outgoing = chi tiêu (quẹt thẻ), incoming = trả nợ
+      const creditUsed = totalOut - totalIn;
+      return {
+        ...acc,
+        computedBalance: -creditUsed, // negative = debt
+        creditUsed: creditUsed,       // positive = amount owed
+        creditAvailable: (acc.creditLimit || 0) - creditUsed,
+      };
+    } else {
+      // Normal: số dư = initialBalance + thu - chi
+      return {
+        ...acc,
+        computedBalance: acc.initialBalance + totalIn - totalOut,
+        creditUsed: 0,
+        creditAvailable: 0,
+      };
+    }
+  }));
+
+  return NextResponse.json(enriched);
 }
 
 export async function POST(req: Request) {

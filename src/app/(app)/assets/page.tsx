@@ -131,7 +131,20 @@ export default function AssetsPage() {
                     </div>
                   </div>
                   <h3 className="font-semibold mb-1">{acc.name}</h3>
-                  <div className="text-2xl font-bold">{fmtMoney(acc.initialBalance)}</div>
+                  {acc.type === "CREDIT_CARD" ? (
+                    <div>
+                      <div className={`text-2xl font-bold ${acc.creditUsed > 0 ? "text-[var(--danger)]" : ""}`}>
+                        {acc.creditUsed > 0 ? `-${fmtMoney(acc.creditUsed)}` : fmtMoney(0)}
+                      </div>
+                      {acc.creditLimit > 0 && (
+                        <div className="text-xs text-[var(--text-muted)] mt-1">
+                          Hạn mức: {fmtMoney(acc.creditLimit)} · Khả dụng: {fmtMoney(acc.creditAvailable)}
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="text-2xl font-bold">{fmtMoney(acc.computedBalance ?? acc.initialBalance)}</div>
+                  )}
                 </div>
               ))}
             </div>

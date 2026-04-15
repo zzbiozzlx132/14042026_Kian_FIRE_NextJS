@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { UserCircle, List, Users, Plus, Trash2, Shield } from "lucide-react";
+import { UserCircle, List, Users, Plus, Trash2, Shield, Send } from "lucide-react";
 import { toast } from "sonner";
 
 export default function SettingsPage() {
@@ -11,6 +11,7 @@ export default function SettingsPage() {
     { id: "users", label: "Thành viên", icon: Users },
     { id: "categories", label: "Hạng mục", icon: List },
     { id: "profile", label: "Tài khoản", icon: UserCircle },
+    { id: "telegram", label: "Telegram", icon: Send },
   ];
 
   return (
@@ -42,6 +43,7 @@ export default function SettingsPage() {
           {activeTab === "users" && <UsersPanel />}
           {activeTab === "categories" && <CategoriesPanel />}
           {activeTab === "profile" && <ProfilePanel />}
+          {activeTab === "telegram" && <TelegramPanel />}
         </div>
       </div>
     </div>
@@ -366,6 +368,168 @@ function ProfilePanel() {
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════
+// TELEGRAM PANEL
+// ═══════════════════════════════════════
+function TelegramPanel() {
+  const [token, setToken] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [connected, setConnected] = useState(false);
+  const [botInfo, setBotInfo] = useState<{ username: string; name: string } | null>(null);
+  const [tokenMasked, setTokenMasked] = useState("");
+
+  useEffect(() => {
+    fetch("/api/settings/telegram")
+      .then(r => r.json())
+      .then(data => {
+        setConnected(data.connected);
+        setBotInfo(data.botInfo);
+        setTokenMasked(data.tokenMasked || "");
+      })
+      .finally(() => setLoading(false));
+  }, []);
+
+  const handleConnect = async () => {
+    if (!token.trim()) {
+      toast.error("Vui lòng nhập Bot Token");
+      return;
+    }
+    setSaving(true);
+    try {
+      const res = await fetch("/api/settings/telegram", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token: token.trim() }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        toast.success(data.message);
+        setConnected(true);
+        setBotInfo(data.botInfo);
+        setTokenMasked(`${token.slice(0, 8)}...${token.slice(-4)}`);
+        setToken("");
+      } else {
+        toast.error(data.error);
+      }
+    } catch {
+      toast.error("Lỗi kết nối server");
+    }
+    setSaving(false);
+  };
+
+  const handleDisconnect = async () => {
+    if (!confirm("Ngắt kết nối Telegram bot?")) return;
+    setSaving(true);
+    try {
+      const res = await fetch("/api/settings/telegram", { method: "DELETE" });
+      const data = await res.json();
+      if (data.success) {
+        toast.success(data.message);
+        setConnected(false);
+        setBotInfo(null);
+        setTokenMasked("");
+      }
+    } catch {
+      toast.error("Lỗi ngắt kết nối");
+    }
+    setSaving(false);
+  };
+
+  if (loading) {
+    return <div className="card p-8"><div className="skeleton h-40 w-full"></div></div>;
+  }
+
+  return (
+    <div className="space-y-6">
+      <div className="card p-6">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="section-title mb-0">🤖 Telegram Bot</h2>
+          {connected && (
+            <span className="text-xs font-semibold px-3 py-1 rounded-full bg-green-50 text-green-600">
+              ✅ Đã kết nối
+            </span>
+          )}
+        </div>
+
+        {connected && botInfo ? (
+          <div className="space-y-4">
+            <div className="flex items-center gap-4 p-4 rounded-xl bg-[var(--bg-input)]">
+              <div className="w-12 h-12 rounded-full bg-blue-100 flex items-center justify-center text-2xl">🤖</div>
+              <div>
+                <div className="font-semibold">@{botInfo.username}</div>
+                <div className="text-sm text-[var(--text-muted)]">{botInfo.name}</div>
+                <div className="text-xs text-[var(--text-muted)] mt-1">Token: {tokenMasked}</div>
+              </div>
+            </div>
+            <button
+              onClick={handleDisconnect}
+              disabled={saving}
+              className="w-full py-2 rounded-xl border border-[var(--danger)] text-[var(--danger)] hover:bg-red-50 transition-colors text-sm font-medium"
+            >
+              {saving ? "Đang ngắt..." : "Ngắt kết nối"}
+            </button>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            <p className="text-sm text-[var(--text-muted)]">
+              Kết nối Telegram bot để nhập thu chi nhanh qua chat.
+            </p>
+
+            <div className="p-4 rounded-xl bg-[var(--bg-input)] border border-[var(--border)]">
+              <h4 className="text-xs font-semibold text-[var(--text-muted)] uppercase mb-3">Hướng dẫn lấy Token</h4>
+              <ol className="text-sm space-y-2 text-[var(--text-secondary)]">
+                <li>1. Mở Telegram → tìm <b>@BotFather</b></li>
+                <li>2. Gõ <code className="px-1.5 py-0.5 bg-[var(--bg-card)] rounded text-xs">/newbot</code></li>
+                <li>3. Đặt tên bot (VD: Kian FIRE)</li>
+                <li>4. Copy token BotFather gửi → dán vào ô dưới</li>
+              </ol>
+            </div>
+
+            <div>
+              <label className="form-label">Bot Token</label>
+              <input
+                type="text"
+                className="input"
+                placeholder="7123456789:AAHxyz..."
+                value={token}
+                onChange={e => setToken(e.target.value)}
+              />
+            </div>
+            <button
+              onClick={handleConnect}
+              disabled={saving || !token.trim()}
+              className="btn btn-primary w-full"
+            >
+              {saving ? "Đang kết nối..." : "🔗 Kết nối Bot"}
+            </button>
+          </div>
+        )}
+      </div>
+
+      {connected && (
+        <div className="card p-6">
+          <h3 className="section-title">📝 Cách sử dụng</h3>
+          <div className="space-y-3 text-sm">
+            <div className="p-3 rounded-lg bg-[var(--bg-input)]">
+              <div className="font-semibold text-[var(--accent)] mb-1">Nhập chi tiêu</div>
+              <code className="text-xs">chi 50k cà phê</code> · <code className="text-xs">chi 1.5tr tiền nhà</code>
+            </div>
+            <div className="p-3 rounded-lg bg-[var(--bg-input)]">
+              <div className="font-semibold text-green-600 mb-1">Nhập thu nhập</div>
+              <code className="text-xs">thu 5tr lương</code> · <code className="text-xs">thu 500k freelance</code>
+            </div>
+            <div className="p-3 rounded-lg bg-[var(--bg-input)]">
+              <div className="font-semibold text-blue-600 mb-1">Xem thông tin</div>
+              <code className="text-xs">/balance</code> — Số dư · <code className="text-xs">/today</code> — Hôm nay · <code className="text-xs">/help</code>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -9,7 +9,11 @@ import { prisma } from "@/lib/prisma";
  * Commands: /balance, /today, /help
  */
 
-const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || "";
+// ── Get bot token from DB ──
+async function getBotToken(): Promise<string> {
+  const settings = await prisma.lifePlanSettings.findFirst();
+  return settings?.telegramBotToken || process.env.TELEGRAM_BOT_TOKEN || "";
+}
 
 // ── Parse Vietnamese amount ──
 // 50k → 50,000 | 1.5tr → 1,500,000 | 200 → 200,000
@@ -55,8 +59,8 @@ function fmtVND(n: number): string {
 }
 
 // ── Send reply to Telegram ──
-async function sendTelegram(chatId: number, text: string, parseMode = "HTML") {
-  await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
+async function sendTelegram(token: string, chatId: number, text: string, parseMode = "HTML") {
+  await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ chat_id: chatId, text, parse_mode: parseMode }),
@@ -81,7 +85,7 @@ function parseMessage(text: string): { type: "EXPENSE" | "INCOME"; amount: numbe
 }
 
 // ── Handle /balance command ──
-async function handleBalance(chatId: number) {
+async function handleBalance(token: string, chatId: number) {
   try {
     const accounts = await prisma.account.findMany({
       where: { status: "active" },
@@ -89,7 +93,7 @@ async function handleBalance(chatId: number) {
     });
 
     if (accounts.length === 0) {
-      await sendTelegram(chatId, "📭 Chưa có tài khoản nào.");
+      await sendTelegram(token, chatId, "📭 Chưa có tài khoản nào.");
       return;
     }
 
@@ -115,14 +119,14 @@ async function handleBalance(chatId: number) {
     }
 
     msg += `━━━━━━━━━━━━━━\n💎 <b>Tổng:</b> ${fmtVND(totalNet)}`;
-    await sendTelegram(chatId, msg);
+    await sendTelegram(token, chatId, msg);
   } catch (error) {
-    await sendTelegram(chatId, "❌ Lỗi khi lấy số dư.");
+    await sendTelegram(token, chatId, "❌ Lỗi khi lấy số dư.");
   }
 }
 
 // ── Handle /today command ──
-async function handleToday(chatId: number) {
+async function handleToday(token: string, chatId: number) {
   try {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -136,7 +140,7 @@ async function handleToday(chatId: number) {
     });
 
     if (txs.length === 0) {
-      await sendTelegram(chatId, "📭 Hôm nay chưa có giao dịch nào.");
+      await sendTelegram(token, chatId, "📭 Hôm nay chưa có giao dịch nào.");
       return;
     }
 
@@ -157,14 +161,14 @@ async function handleToday(chatId: number) {
     msg += `🔴 Chi: -${fmtVND(totalOut)}\n`;
     msg += `💰 Ròng: ${fmtVND(totalIn - totalOut)}`;
 
-    await sendTelegram(chatId, msg);
+    await sendTelegram(token, chatId, msg);
   } catch (error) {
-    await sendTelegram(chatId, "❌ Lỗi khi lấy giao dịch hôm nay.");
+    await sendTelegram(token, chatId, "❌ Lỗi khi lấy giao dịch hôm nay.");
   }
 }
 
 // ── Handle /help command ──
-async function handleHelp(chatId: number) {
+async function handleHelp(token: string, chatId: number) {
   const msg = `🔥 <b>Kian FIRE Bot</b> — Nhập thu chi nhanh
 
 <b>📝 Nhập giao dịch:</b>
@@ -185,7 +189,7 @@ async function handleHelp(chatId: number) {
 • <code>1tr5</code> = 1,500,000
 • Số < 1000 tự nhân 1000 (200 = 200,000)`;
 
-  await sendTelegram(chatId, msg);
+  await sendTelegram(token, chatId, msg);
 }
 
 // ── Main webhook handler ──
@@ -198,29 +202,32 @@ export async function POST(req: Request) {
       return NextResponse.json({ ok: true });
     }
 
+    const token = await getBotToken();
+    if (!token) return NextResponse.json({ ok: true });
+
     const chatId = message.chat.id;
     const text = message.text.trim();
 
     // Commands
     if (text === "/start" || text === "/help") {
-      await handleHelp(chatId);
+      await handleHelp(token, chatId);
       return NextResponse.json({ ok: true });
     }
 
     if (text === "/balance" || text === "/sodu") {
-      await handleBalance(chatId);
+      await handleBalance(token, chatId);
       return NextResponse.json({ ok: true });
     }
 
     if (text === "/today" || text === "/homnay") {
-      await handleToday(chatId);
+      await handleToday(token, chatId);
       return NextResponse.json({ ok: true });
     }
 
     // Parse transaction message
     const parsed = parseMessage(text);
     if (!parsed) {
-      await sendTelegram(chatId, `❓ Không hiểu. Gõ /help để xem hướng dẫn.\n\nVí dụ: <code>chi 50k cà phê</code>`);
+      await sendTelegram(token, chatId, `❓ Không hiểu. Gõ /help để xem hướng dẫn.\n\nVí dụ: <code>chi 50k cà phê</code>`);
       return NextResponse.json({ ok: true });
     }
 
@@ -246,7 +253,7 @@ export async function POST(req: Request) {
     });
 
     // Create transaction
-    const tx = await prisma.transaction.create({
+    await prisma.transaction.create({
       data: {
         date: new Date(),
         type: parsed.type,
@@ -272,12 +279,12 @@ export async function POST(req: Request) {
 💳 ${accName}
 ✅ Đã lưu!`;
 
-    await sendTelegram(chatId, reply);
+    await sendTelegram(token, chatId, reply);
 
     return NextResponse.json({ ok: true });
   } catch (error: any) {
     console.error("Telegram webhook error:", error);
-    return NextResponse.json({ ok: true }); // Always 200 for Telegram
+    return NextResponse.json({ ok: true });
   }
 }
 

@@ -281,14 +281,15 @@ model RecurringTransaction {
 // LIFE PLAN SETTINGS
 // ═══════════════════════════════════════
 model LifePlanSettings {
-  id                   String @id @default("default")
-  currentAge           Int    @default(27)
-  targetAge            Int    @default(40)
-  targetMonthlyExpense Float  @default(0)
-  expectedReturnPct    Float  @default(10)
-  inflationPct         Float  @default(3)
-  swrPct               Float  @default(4)
-  plannedMonthlyInvest Float  @default(0)
+  id                   String  @id @default("default")
+  currentAge           Int     @default(27)
+  targetAge            Int     @default(40)
+  targetMonthlyExpense Float   @default(0)
+  expectedReturnPct    Float   @default(10)
+  inflationPct         Float   @default(3)
+  swrPct               Float   @default(4)
+  plannedMonthlyInvest Float   @default(0)
+  telegramBotToken     String?
 }
 
 // ═══════════════════════════════════════
