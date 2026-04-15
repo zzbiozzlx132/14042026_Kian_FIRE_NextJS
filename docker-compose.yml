@@ -28,6 +28,7 @@ services:
       - NEXTAUTH_SECRET=kian-fire-vps-super-secret-key-18022026
       - AUTH_SECRET=kian-fire-vps-super-secret-key-18022026
       - AUTH_TRUST_HOST=true
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN:-}
     depends_on:
       fire-db:
         condition: service_healthy

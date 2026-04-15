@@ -5,7 +5,7 @@ export default auth((req) => {
   const { pathname } = req.nextUrl;
 
   // Public routes — không cần login
-  const publicPaths = ["/login", "/api/auth"];
+  const publicPaths = ["/login", "/api/auth", "/api/telegram"];
   const isPublic = publicPaths.some((p) => pathname.startsWith(p));
 
   // Static assets & Next.js internals
