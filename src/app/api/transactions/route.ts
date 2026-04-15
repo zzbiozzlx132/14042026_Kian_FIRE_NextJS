@@ -61,7 +61,8 @@ export async function POST(req: Request) {
         toAccountId: body.toAccountId || null,
         categoryId: body.categoryId || null,
         description: body.description || "",
-        essential: body.essential || "NON_ESSENTIAL",
+        essential: body.type === "EXPENSE" ? (body.essential || "NON_ESSENTIAL") : "NON_ESSENTIAL",
+        rating: body.type === "EXPENSE" ? (body.rating || "NORMAL") : "NORMAL",
         createdById: session.user?.id || ""
       }
     });

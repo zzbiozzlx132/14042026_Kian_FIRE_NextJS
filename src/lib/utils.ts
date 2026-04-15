@@ -8,7 +8,11 @@ export function cn(...inputs: ClassValue[]) {
 /** Format number as Vietnamese currency (e.g., 1.500.000 đ) */
 export function fmtMoney(n: number | null | undefined): string {
   if (n === null || n === undefined) return "0\u00a0đ";
-  return Number(n).toLocaleString("vi-VN") + "\u00a0đ";
+  const num = Number(n);
+  const isNegative = num < 0;
+  const abs = Math.abs(Math.round(num));
+  const formatted = abs.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+  return (isNegative ? "-" : "") + formatted + "\u00a0đ";
 }
 
 /** Format number as compact money (e.g., 1.5M, 500K) */

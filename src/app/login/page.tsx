@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { signIn } from "next-auth/react";
 import { useRouter } from "next/navigation";
-import { Flame, Eye, EyeOff, ArrowRight } from "lucide-react";
+import { Eye, EyeOff, ArrowRight } from "lucide-react";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -49,8 +49,8 @@ export default function LoginPage() {
         <div className="login-card">
           {/* Logo */}
           <div className="login-logo">
-            <div className="login-logo-icon">
-              <Flame size={28} strokeWidth={2.5} />
+            <div className="login-logo-icon" style={{ background: 'transparent' }}>
+              <img src="/icon.png" alt="Kian FIRE" style={{ width: 36, height: 36, objectFit: 'contain' }} />
             </div>
             <h1 className="login-title">Kian FIRE</h1>
             <p className="login-subtitle">Financial Independence, Retire Early</p>
@@ -157,7 +157,7 @@ export default function LoginPage() {
         .login-orb-1 {
           width: 400px;
           height: 400px;
-          background: #6366f1;
+          background: #E8721E;
           top: -100px;
           right: -100px;
           animation: float 8s ease-in-out infinite;
@@ -165,7 +165,7 @@ export default function LoginPage() {
         .login-orb-2 {
           width: 300px;
           height: 300px;
-          background: #8b5cf6;
+          background: #F5A623;
           bottom: -80px;
           left: -80px;
           animation: float 10s ease-in-out infinite reverse;
@@ -210,10 +210,10 @@ export default function LoginPage() {
           display: flex;
           align-items: center;
           justify-content: center;
-          background: linear-gradient(135deg, #6366f1, #8b5cf6);
+          background: linear-gradient(135deg, #E8721E, #F5A623);
           border-radius: 16px;
           color: white;
-          box-shadow: 0 8px 24px rgba(99, 102, 241, 0.3);
+          box-shadow: 0 8px 24px rgba(232, 114, 30, 0.3);
         }
         .login-title {
           font-size: 28px;

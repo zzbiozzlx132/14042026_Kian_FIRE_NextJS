@@ -2,8 +2,9 @@
 
 import { useState, useEffect } from "react";
 import { Plus, Wallet, TrendingUp, ArrowDownRight, Trash2, Pencil, X, AlertTriangle } from "lucide-react";
-import { fmtMoney, fmtMoneyCompact, fmtDate, ACCOUNT_TYPE_LABELS } from "@/lib/utils";
+import { fmtMoney, fmtDate, ACCOUNT_TYPE_LABELS, parseAmount } from "@/lib/utils";
 import { toast } from "sonner";
+import { MoneyInput } from "@/components/ui/money-input";
 
 const INV_TYPE_LABELS: Record<string, string> = {
   GOLD: "Vàng", STOCK: "Cổ phiếu", CRYPTO: "Crypto",
@@ -325,7 +326,7 @@ function AddAccountModal({ onClose, onCreated }: { onClose: () => void; onCreate
     if (!name) { toast.error("Vui lòng nhập tên tài khoản"); return; }
     setLoading(true);
     const res = await fetch("/api/accounts", { method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name, type, initialBalance: parseFloat(balance) || 0 }) });
+      body: JSON.stringify({ name, type, initialBalance: parseAmount(balance) }) });
     if (res.ok) { toast.success("Đã thêm tài khoản"); onCreated(await res.json()); }
     else toast.error("Thêm thất bại");
     setLoading(false);
@@ -346,7 +347,7 @@ function AddAccountModal({ onClose, onCreated }: { onClose: () => void; onCreate
             <option value="SAVINGS">Tiết kiệm</option>
           </select>
         </div>
-        <div className="form-group"><label className="form-label">Số dư ban đầu (VNĐ)</label><input className="input" type="number" placeholder="0" value={balance} onChange={e => setBalance(e.target.value)} /></div>
+        <div className="form-group"><label className="form-label">Số dư ban đầu (VNĐ)</label><MoneyInput placeholder="0" value={balance} onChange={setBalance} /></div>
         <div className="flex gap-3 mt-6"><button onClick={onClose} className="btn btn-ghost flex-1">Hủy</button><button onClick={handleSubmit} disabled={loading} className="btn btn-primary flex-1">{loading ? "Đang tạo..." : "Tạo tài khoản"}</button></div>
       </div>
     </div>
@@ -364,7 +365,7 @@ function AddInvestmentModal({ onClose, onCreated }: { onClose: () => void; onCre
     if (!form.name || !form.buyPrice) { toast.error("Nhập tên và giá mua"); return; }
     setLoading(true);
     const res = await fetch("/api/investments", { method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ...form, buyPrice: parseFloat(form.buyPrice), currentPrice: parseFloat(form.currentPrice || form.buyPrice), quantity: parseFloat(form.quantity) || 1 }) });
+      body: JSON.stringify({ ...form, buyPrice: parseAmount(form.buyPrice), currentPrice: parseAmount(form.currentPrice || form.buyPrice), quantity: parseFloat(form.quantity) || 1 }) });
     if (res.ok) { toast.success("Đã thêm khoản đầu tư"); onCreated(await res.json()); }
     else toast.error("Thêm thất bại");
     setLoading(false);
@@ -392,10 +393,10 @@ function AddInvestmentModal({ onClose, onCreated }: { onClose: () => void; onCre
             <input className="input" type="number" step="any" min="0" placeholder="VD: 5" value={form.quantity} onChange={e => setForm({...form, quantity: e.target.value})} />
           </div>
           <div className="form-group"><label className="form-label">Giá mua / {unit} (VNĐ)</label>
-            <input className="input" type="number" placeholder="VD: 9.200.000" value={form.buyPrice} onChange={e => setForm({...form, buyPrice: e.target.value})} />
+            <MoneyInput placeholder="VD: 9.200.000" value={form.buyPrice} onChange={val => setForm({...form, buyPrice: val})} />
           </div>
           <div className="form-group"><label className="form-label">Giá hiện tại / {unit} (VNĐ)</label>
-            <input className="input" type="number" placeholder="Bằng giá mua nếu bỏ trống" value={form.currentPrice} onChange={e => setForm({...form, currentPrice: e.target.value})} />
+            <MoneyInput placeholder="Bằng giá mua nếu bỏ trống" value={form.currentPrice} onChange={val => setForm({...form, currentPrice: val})} />
           </div>
           <div className="form-group col-span-2"><label className="form-label">Ghi chú (tuỳ chọn)</label>
             <input className="input" placeholder="VD: Mua tại SJC Q1" value={form.note} onChange={e => setForm({...form, note: e.target.value})} />
@@ -405,9 +406,9 @@ function AddInvestmentModal({ onClose, onCreated }: { onClose: () => void; onCre
         {/* Preview */}
         {form.buyPrice && (
           <div className="mt-4 p-3 rounded-xl bg-[var(--bg-input)] text-xs space-y-1">
-            <div className="flex justify-between"><span className="text-[var(--text-muted)]">Tổng vốn</span><span className="font-bold">{fmtMoney((parseFloat(form.buyPrice) || 0) * (parseFloat(form.quantity) || 1))}</span></div>
+            <div className="flex justify-between"><span className="text-[var(--text-muted)]">Tổng vốn</span><span className="font-bold">{fmtMoney((parseAmount(form.buyPrice)) * (parseFloat(form.quantity) || 1))}</span></div>
             {form.currentPrice && (
-              <div className="flex justify-between"><span className="text-[var(--text-muted)]">Giá trị hiện tại</span><span className="font-bold">{fmtMoney((parseFloat(form.currentPrice) || 0) * (parseFloat(form.quantity) || 1))}</span></div>
+              <div className="flex justify-between"><span className="text-[var(--text-muted)]">Giá trị hiện tại</span><span className="font-bold">{fmtMoney((parseAmount(form.currentPrice)) * (parseFloat(form.quantity) || 1))}</span></div>
             )}
           </div>
         )}
@@ -425,14 +426,14 @@ function EditInvestmentModal({ inv, onClose, onUpdated }: { inv: any; onClose: (
   const [loading, setLoading] = useState(false);
   const unit = INV_UNIT[inv.type] || "đơn vị";
 
-  const newValue = (parseFloat(currentPrice) || 0) * (parseFloat(quantity) || 0);
+  const newValue = parseAmount(currentPrice) * (parseFloat(quantity) || 0);
   const cost = inv.buyPrice * (parseFloat(quantity) || inv.quantity);
   const pnl = newValue - cost;
 
   const handleSubmit = async () => {
     setLoading(true);
     const res = await fetch(`/api/investments/${inv.id}`, { method: "PUT", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ currentPrice: parseFloat(currentPrice), quantity: parseFloat(quantity) }) });
+      body: JSON.stringify({ currentPrice: parseAmount(currentPrice), quantity: parseFloat(quantity) }) });
     if (res.ok) { toast.success("Đã cập nhật"); onUpdated(await res.json()); }
     else toast.error("Cập nhật thất bại");
     setLoading(false);
@@ -456,7 +457,7 @@ function EditInvestmentModal({ inv, onClose, onUpdated }: { inv: any; onClose: (
             <input className="input" type="number" step="any" value={quantity} onChange={e => setQuantity(e.target.value)} />
           </div>
           <div className="form-group"><label className="form-label">Giá hiện tại / {unit}</label>
-            <input className="input text-lg font-bold" type="number" value={currentPrice} onChange={e => setCurrentPrice(e.target.value)} autoFocus />
+            <MoneyInput className="text-lg font-bold" value={currentPrice} onChange={setCurrentPrice} autoFocus />
           </div>
         </div>
 
@@ -481,7 +482,7 @@ function SellInvestmentModal({ inv, onClose, onSold }: { inv: any; onClose: () =
   const unit = INV_UNIT[inv.type] || "đơn vị";
 
   const qty = parseFloat(quantitySold) || 0;
-  const price = parseFloat(sellPrice) || 0;
+  const price = parseAmount(sellPrice);
   const totalSellValue = qty * price;
   const totalBuyCost = qty * inv.buyPrice;
   const pnl = totalSellValue - totalBuyCost;
@@ -538,7 +539,7 @@ function SellInvestmentModal({ inv, onClose, onSold }: { inv: any; onClose: () =
           </div>
           <div className="form-group">
             <label className="form-label">Giá bán / {unit} (VNĐ)</label>
-            <input className="input text-lg font-bold" type="number" value={sellPrice} onChange={e => setSellPrice(e.target.value)} />
+            <MoneyInput className="text-lg font-bold" value={sellPrice} onChange={setSellPrice} />
           </div>
         </div>
 

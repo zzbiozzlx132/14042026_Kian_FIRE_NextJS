@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useSession } from "next-auth/react";
 import { Header } from "@/components/layout/header";
-import { fmtMoney, fmtMoneyCompact, fmtDate } from "@/lib/utils";
+import { fmtMoney, fmtDate } from "@/lib/utils";
 import { Wallet, TrendingUp, CreditCard, ArrowUpRight, ArrowDownRight, Activity, ReceiptText } from "lucide-react";
 import Link from "next/link";
 
@@ -18,12 +19,16 @@ interface DashboardData {
 }
 
 export default function DashboardPage() {
+  const { data: session } = useSession();
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     fetch("/api/dashboard")
-      .then(r => r.json())
+      .then(r => {
+        if (!r.ok) throw new Error("API Error");
+        return r.json();
+      })
       .then(d => { setData(d); setLoading(false); })
       .catch(() => setLoading(false));
   }, []);
@@ -37,7 +42,7 @@ export default function DashboardPage() {
 
   return (
     <div className="animate-in fade-in duration-500">
-      <Header userName="Kian" />
+      <Header userName={session?.user?.name || "Bạn"} />
 
       {/* Hero: Net Worth */}
       <div className="card-glass overflow-hidden relative mb-8">
@@ -55,13 +60,13 @@ export default function DashboardPage() {
             <div className="bg-[var(--bg-input)] px-4 py-3 rounded-xl min-w-[140px]">
               <div className="text-xs text-[var(--text-muted)] font-semibold mb-1 uppercase tracking-wider">Tài sản hiện có</div>
               <div className="text-lg font-bold text-[var(--success)]">
-                {loading ? "..." : `+${fmtMoneyCompact(d.totalAssets)}`}
+                {loading ? "..." : `+${fmtMoney(d.totalAssets)}`}
               </div>
             </div>
             <div className="bg-[var(--bg-input)] px-4 py-3 rounded-xl min-w-[140px]">
               <div className="text-xs text-[var(--text-muted)] font-semibold mb-1 uppercase tracking-wider">Tổng nợ & thẻ</div>
               <div className="text-lg font-bold text-[var(--danger)]">
-                {loading ? "..." : `-${fmtMoneyCompact(d.totalDebt)}`}
+                {loading ? "..." : `-${fmtMoney(d.totalDebt)}`}
               </div>
             </div>
           </div>
@@ -112,7 +117,7 @@ export default function DashboardPage() {
                     <div className="text-xs text-[var(--text-muted)]">{fmtDate(tx.date)}</div>
                   </div>
                   <div className={`text-sm font-bold ${tx.type === "INCOME" ? "text-[var(--success)]" : "text-[var(--danger)]"}`}>
-                    {tx.type === "INCOME" ? "+" : "-"}{fmtMoneyCompact(tx.amount)}
+                    {tx.type === "INCOME" ? "+" : "-"}{fmtMoney(tx.amount)}
                   </div>
                 </div>
               ))}
@@ -134,7 +139,7 @@ function StatCard({ icon: Icon, label, value, color, loading }: {
     success: "bg-emerald-50 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-400",
     danger: "bg-red-50 text-red-700 dark:bg-red-900/20 dark:text-red-400",
     info: "bg-blue-50 text-blue-700 dark:bg-blue-900/20 dark:text-blue-400",
-    accent: "bg-indigo-50 text-indigo-700 dark:bg-indigo-900/20 dark:text-indigo-400",
+    accent: "bg-orange-50 text-orange-700 dark:bg-orange-900/20 dark:text-orange-400",
   };
 
   return (
@@ -146,7 +151,7 @@ function StatCard({ icon: Icon, label, value, color, loading }: {
       </div>
       <div className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider mb-1">{label}</div>
       <div className="text-xl font-bold">
-        {loading ? <div className="skeleton h-6 w-20"></div> : fmtMoneyCompact(value)}
+        {loading ? <div className="skeleton h-6 w-20"></div> : fmtMoney(value)}
       </div>
     </div>
   );

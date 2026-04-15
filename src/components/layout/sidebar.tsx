@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
-import { LogOut, LayoutDashboard, ReceiptText, Wallet, Target, Settings, Flame } from "lucide-react";
+import { LogOut, LayoutDashboard, ReceiptText, Wallet, Target, Settings } from "lucide-react";
 import { signOut } from "next-auth/react";
 import { useTheme } from "@/components/theme-provider";
 import { Switch } from "@/components/ui/switch";
@@ -24,8 +24,8 @@ export function Sidebar({ user }: { user: any }) {
     <aside className="sidebar">
       {/* Brand */}
       <div className="flex items-center gap-3 px-2 mb-10 mt-2">
-        <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white shadow-lg">
-          <Flame size={20} strokeWidth={2.5} />
+        <div className="w-10 h-10 rounded-xl flex items-center justify-center shadow-lg overflow-hidden">
+          <img src="/icon.png" alt="Kian FIRE" className="w-10 h-10 object-contain" />
         </div>
         <div>
           <div className="font-bold text-lg leading-tight tracking-tight text-[var(--text-primary)]">Kian FIRE</div>

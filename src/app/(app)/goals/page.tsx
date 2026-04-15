@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { fmtMoney, fmtMoneyCompact } from "@/lib/utils";
+import { fmtMoney } from "@/lib/utils";
 import { TrendingUp, Calculator, Target, ArrowUpRight, ArrowDownRight, Info, Flame, Percent, Lightbulb, AlertTriangle, CheckCircle2, CircleAlert } from "lucide-react";
 
 interface Projection {
@@ -130,7 +130,7 @@ export default function GoalsPage() {
           </div>
           <div>
             <h2 className="text-base font-bold">Lãi suất cần để đạt FIRE</h2>
-            <p className="text-xs text-[var(--text-muted)]">Với vốn hiện tại {fmtMoneyCompact(d.totalNetWorth)} + góp thêm {fmtMoneyCompact(d.avgMonthlySavings)}/tháng</p>
+            <p className="text-xs text-[var(--text-muted)]">Với vốn hiện tại {fmtMoney(d.totalNetWorth)} + góp thêm {fmtMoney(d.avgMonthlySavings)}/tháng</p>
           </div>
         </div>
 
@@ -211,10 +211,10 @@ export default function GoalsPage() {
 
       {/* ═══ INVESTMENT SUMMARY ═══ */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-        <SummaryCard icon={Target} label="Vốn đã đầu tư" value={fmtMoneyCompact(d.totalInvested)} color="bg-blue-50 text-blue-600" loading={loading} />
-        <SummaryCard icon={TrendingUp} label="Giá trị hiện tại" value={fmtMoneyCompact(d.totalCurrentValue)} color="bg-indigo-50 text-indigo-600" loading={loading} />
-        <SummaryCard icon={d.totalPnL >= 0 ? ArrowUpRight : ArrowDownRight} label="Lãi/Lỗ" value={`${d.totalPnL >= 0 ? "+" : ""}${fmtMoneyCompact(d.totalPnL)} (${d.returnPct}%)`} color={d.totalPnL >= 0 ? "bg-emerald-50 text-emerald-600" : "bg-red-50 text-red-600"} loading={loading} />
-        <SummaryCard icon={Calculator} label="Tiết kiệm TB/tháng" value={fmtMoneyCompact(d.avgMonthlySavings)} color="bg-amber-50 text-amber-600" loading={loading} />
+        <SummaryCard icon={Target} label="Vốn đã đầu tư" value={fmtMoney(d.totalInvested)} color="bg-blue-50 text-blue-600" loading={loading} />
+        <SummaryCard icon={TrendingUp} label="Giá trị hiện tại" value={fmtMoney(d.totalCurrentValue)} color="bg-orange-50 text-orange-600" loading={loading} />
+        <SummaryCard icon={d.totalPnL >= 0 ? ArrowUpRight : ArrowDownRight} label="Lãi/Lỗ" value={`${d.totalPnL >= 0 ? "+" : ""}${fmtMoney(d.totalPnL)} (${d.returnPct}%)`} color={d.totalPnL >= 0 ? "bg-emerald-50 text-emerald-600" : "bg-red-50 text-red-600"} loading={loading} />
+        <SummaryCard icon={Calculator} label="Tiết kiệm TB/tháng" value={fmtMoney(d.avgMonthlySavings)} color="bg-amber-50 text-amber-600" loading={loading} />
       </div>
 
       {/* ═══ PARAMETERS ═══ */}
@@ -243,12 +243,12 @@ export default function GoalsPage() {
       {/* ═══ COMPOUND TABLE 1→30 ═══ */}
       <div className="card overflow-hidden">
         <div className="flex items-center gap-3 mb-6">
-          <div className="w-10 h-10 bg-indigo-50 text-indigo-600 rounded-xl flex items-center justify-center">
+          <div className="w-10 h-10 bg-orange-50 text-orange-600 rounded-xl flex items-center justify-center">
             <Calculator size={20} />
           </div>
           <div>
             <h2 className="text-lg font-bold">Bảng lãi kép 1 → 30 năm</h2>
-            <p className="text-xs text-[var(--text-muted)]">FV = P×(1+r)^n + PMT×((1+r)^n − 1)/r | Vốn: {fmtMoneyCompact(d.totalNetWorth)} + {fmtMoneyCompact(d.avgMonthlySavings)}/tháng @ {d.expectedReturnPct}%</p>
+            <p className="text-xs text-[var(--text-muted)]">FV = P×(1+r)^n + PMT×((1+r)^n − 1)/r | Vốn: {fmtMoney(d.totalNetWorth)} + {fmtMoney(d.avgMonthlySavings)}/tháng @ {d.expectedReturnPct}%</p>
           </div>
         </div>
 

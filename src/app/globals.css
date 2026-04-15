@@ -2,7 +2,7 @@
 
 /* ═══════════════════════════════════════ */
 /* KIANIS DESIGN SYSTEM V3                */
-/* Mệnh Thổ — Trắng/Xám ấm — Premium    */
+/* Fire Lotus — Cam/Vàng ấm — Premium    */
 /* ═══════════════════════════════════════ */
 
 :root {
@@ -24,11 +24,11 @@
 
   --border: rgba(0, 0, 0, 0.08);
   --border-light: rgba(0, 0, 0, 0.04);
-  --border-focus: #6366f1;
+  --border-focus: #E8721E;
 
-  --accent: #4f46e5;
-  --accent-hover: #4338ca;
-  --accent-muted: rgba(79, 70, 229, 0.06);
+  --accent: #E8721E;
+  --accent-hover: #C14B1A;
+  --accent-muted: rgba(232, 114, 30, 0.08);
 
   --success: #059669;
   --success-bg: #ecfdf5;
@@ -68,11 +68,11 @@
 
   --border: rgba(255, 255, 255, 0.08);
   --border-light: rgba(255, 255, 255, 0.04);
-  --border-focus: #818cf8;
+  --border-focus: #F5A623;
 
-  --accent: #818cf8;
-  --accent-hover: #6366f1;
-  --accent-muted: rgba(129, 140, 248, 0.12);
+  --accent: #F5A623;
+  --accent-hover: #E8721E;
+  --accent-muted: rgba(245, 166, 35, 0.12);
 
   --success: #34d399;
   --success-bg: rgba(52, 211, 153, 0.1);
@@ -129,7 +129,7 @@ body {
   transition: border-color 0.2s ease;
 }
 .card:hover {
-  border-color: rgba(99, 102, 241, 0.25);
+  border-color: rgba(232, 114, 30, 0.25);
 }
 
 .card-glass {
@@ -189,7 +189,7 @@ body {
 .btn-primary:hover:not(:disabled) {
   background: var(--accent-hover);
   transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(79, 70, 229, 0.25);
+  box-shadow: 0 4px 12px rgba(232, 114, 30, 0.25);
 }
 
 .btn-ghost {
