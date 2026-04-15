@@ -24,6 +24,7 @@ export default function AssetsPage() {
   const [editInv, setEditInv] = useState<any>(null);
   const [deleteTarget, setDeleteTarget] = useState<any>(null);
   const [sellTarget, setSellTarget] = useState<any>(null);
+  const [editAccount, setEditAccount] = useState<any>(null);
 
   useEffect(() => {
     fetch("/api/accounts").then(r => r.json()).then(d => { if (Array.isArray(d)) setAccounts(d); });
@@ -109,7 +110,7 @@ export default function AssetsPage() {
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {accounts.map(acc => (
-                <div key={acc.id} className="card p-5 hover:border-[var(--accent)] transition-colors group relative">
+                <div key={acc.id} className="card p-5 hover:border-[var(--accent)] transition-colors group relative cursor-pointer" onClick={() => setEditAccount(acc)}>
                   <div className="flex justify-between items-start mb-4">
                     <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${
                       acc.type === "CREDIT_CARD" ? "bg-red-50 text-red-600" :
@@ -123,7 +124,11 @@ export default function AssetsPage() {
                       <span className="text-[10px] font-semibold px-2 py-1 rounded-full bg-[var(--bg-input)] text-[var(--text-muted)] uppercase tracking-wider">
                         {ACCOUNT_TYPE_LABELS[acc.type] || acc.type}
                       </span>
-                      <button onClick={async () => {
+                      <button onClick={(e) => { e.stopPropagation(); setEditAccount(acc); }} className="opacity-0 group-hover:opacity-100 p-1 rounded-lg hover:bg-blue-50 text-[var(--text-muted)] hover:text-[var(--accent)] transition-all" title="Sửa">
+                        <Pencil size={14} />
+                      </button>
+                      <button onClick={(e) => {
+                        e.stopPropagation();
                         setDeleteTarget({ ...acc, _type: "account" });
                       }} className="opacity-0 group-hover:opacity-100 p-1 rounded-lg hover:bg-red-50 text-[var(--text-muted)] hover:text-[var(--danger)] transition-all" title="Xoá">
                         <Trash2 size={14} />
@@ -206,6 +211,7 @@ export default function AssetsPage() {
       {showInvModal && <AddInvestmentModal onClose={() => setShowInvModal(false)} onCreated={(inv: any) => { setInvestments(prev => [inv, ...prev]); setShowInvModal(false); }} />}
       {editInv && <EditInvestmentModal inv={editInv} onClose={() => setEditInv(null)} onUpdated={(updated: any) => { setInvestments(prev => prev.map(i => i.id === updated.id ? updated : i)); setEditInv(null); }} />}
       {sellTarget && <SellInvestmentModal inv={sellTarget} onClose={() => setSellTarget(null)} onSold={handleSellComplete} />}
+      {editAccount && <EditAccountModal acc={editAccount} onClose={() => setEditAccount(null)} onUpdated={(updated: any) => { setAccounts(prev => prev.map(a => a.id === updated.id ? { ...a, ...updated, computedBalance: (updated.initialBalance || 0) + (a.computedBalance || 0) - (a.initialBalance || 0) } : a)); setEditAccount(null); }} />}
 
       {/* ═══ DELETE CONFIRM MODAL ═══ */}
       {deleteTarget && (
@@ -582,6 +588,99 @@ function SellInvestmentModal({ inv, onClose, onSold }: { inv: any; onClose: () =
           <button onClick={handleSubmit} disabled={loading || qty <= 0 || price <= 0}
             className="btn flex-1 bg-[var(--warning)] text-white hover:opacity-90">
             {loading ? "Đang xử lý..." : isPartial ? `Bán ${qty} ${unit}` : "Bán tất cả"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ═══ EDIT ACCOUNT MODAL ═══ */
+function EditAccountModal({ acc, onClose, onUpdated }: { acc: any; onClose: () => void; onUpdated: (updated: any) => void }) {
+  const [name, setName] = useState(acc.name);
+  const [initialBalance, setInitialBalance] = useState(acc.initialBalance?.toString() || "0");
+  const [creditLimit, setCreditLimit] = useState(acc.creditLimit?.toString() || "0");
+  const [loading, setLoading] = useState(false);
+
+  const handleSubmit = async () => {
+    if (!name.trim()) { toast.error("Tên tài khoản không được trống"); return; }
+    setLoading(true);
+    const res = await fetch("/api/accounts", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        id: acc.id,
+        name: name.trim(),
+        initialBalance: parseAmount(initialBalance),
+        creditLimit: acc.type === "CREDIT_CARD" ? parseAmount(creditLimit) : undefined,
+      }),
+    });
+    if (res.ok) {
+      const updated = await res.json();
+      toast.success("Đã cập nhật tài khoản");
+      onUpdated(updated);
+    } else {
+      const data = await res.json();
+      toast.error(data.error || "Cập nhật thất bại");
+    }
+    setLoading(false);
+  };
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal-content max-w-md" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between mb-6">
+          <h2 className="text-lg font-bold">Sửa: {acc.name}</h2>
+          <button onClick={onClose} className="text-[var(--text-muted)] hover:text-[var(--text-primary)]"><X size={20} /></button>
+        </div>
+
+        <div className="space-y-4">
+          <div className="form-group">
+            <label className="form-label">Tên tài khoản</label>
+            <input className="input" value={name} onChange={e => setName(e.target.value)} autoFocus />
+          </div>
+
+          {acc.type !== "CREDIT_CARD" ? (
+            <div className="form-group">
+              <label className="form-label">Số dư ban đầu (VNĐ)</label>
+              <MoneyInput value={initialBalance} onChange={setInitialBalance} />
+              <p className="text-xs text-[var(--text-muted)] mt-1">
+                Đây là số tiền trong tài khoản trước khi bạn bắt đầu ghi chép trên app
+              </p>
+            </div>
+          ) : (
+            <div className="form-group">
+              <label className="form-label">Hạn mức tín dụng (VNĐ)</label>
+              <MoneyInput value={creditLimit} onChange={setCreditLimit} />
+            </div>
+          )}
+
+          <div className="p-3 rounded-xl bg-[var(--bg-input)] text-xs space-y-1">
+            <div className="flex justify-between">
+              <span className="text-[var(--text-muted)]">Loại</span>
+              <span className="font-semibold">{ACCOUNT_TYPE_LABELS[acc.type] || acc.type}</span>
+            </div>
+            {acc.type !== "CREDIT_CARD" && (
+              <div className="flex justify-between">
+                <span className="text-[var(--text-muted)]">Số dư hiện tại</span>
+                <span className="font-bold">{fmtMoney(acc.computedBalance ?? acc.initialBalance)}</span>
+              </div>
+            )}
+            {acc.type === "CREDIT_CARD" && (
+              <>
+                <div className="flex justify-between">
+                  <span className="text-[var(--text-muted)]">Nợ đang dùng</span>
+                  <span className="font-bold text-[var(--danger)]">{acc.creditUsed > 0 ? fmtMoney(acc.creditUsed) : "0đ"}</span>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+
+        <div className="flex gap-3 mt-6">
+          <button onClick={onClose} className="btn btn-ghost flex-1">Hủy</button>
+          <button onClick={handleSubmit} disabled={loading} className="btn btn-primary flex-1">
+            {loading ? "Đang lưu..." : "Cập nhật"}
           </button>
         </div>
       </div>

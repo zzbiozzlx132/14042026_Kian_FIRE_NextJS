@@ -71,8 +71,8 @@ export async function GET() {
     allTx.forEach((tx: any) => {
       if (tx.type === "EXPENSE" && tx.fromAccountId) {
         balances[tx.fromAccountId] = (balances[tx.fromAccountId] || 0) - tx.amount;
-      } else if (tx.type === "INCOME" && tx.fromAccountId) {
-        balances[tx.fromAccountId] = (balances[tx.fromAccountId] || 0) + tx.amount;
+      } else if (tx.type === "INCOME" && tx.toAccountId) {
+        balances[tx.toAccountId] = (balances[tx.toAccountId] || 0) + tx.amount;
       } else if (tx.type === "TRANSFER" && tx.fromAccountId && tx.toAccountId) {
         balances[tx.fromAccountId] = (balances[tx.fromAccountId] || 0) - tx.amount;
         balances[tx.toAccountId] = (balances[tx.toAccountId] || 0) + tx.amount;
@@ -80,11 +80,18 @@ export async function GET() {
     });
 
     let totalCash = 0;
+    let totalDebt = 0;
     accounts.forEach((a: any) => {
-      if (a.type !== "CREDIT_CARD") totalCash += (balances[a.id] || 0);
+      const bal = balances[a.id] || 0;
+      if (a.type === "CREDIT_CARD") {
+        // Credit card: outgoing = debt used
+        totalDebt += Math.max(0, -bal); // negative balance = debt
+      } else {
+        totalCash += bal;
+      }
     });
 
-    const totalNetWorth = totalCash + totalCurrentValue;
+    const totalNetWorth = totalCash + totalCurrentValue - totalDebt;
 
     // ═══ 5. FIRE CALCULATION ═══
     // FIRE Number = Annual Expenses × 25 (4% rule)
@@ -98,12 +105,14 @@ export async function GET() {
     const realRate = (1 + annualRate) / (1 + inflationPct / 100) - 1;
 
     let yearsToFire = -1; // -1 means unreachable
-    if (avgMonthlySavings > 0 || totalNetWorth > 0) {
-      // Iterate to find when portfolio value >= FIRE number (adjusted for inflation)
-      let portfolio = totalNetWorth;
-      for (let month = 1; month <= 600; month++) { // max 50 years
+    if (fireNumber <= 0) {
+      yearsToFire = 0; // No expenses = already FIRE
+    } else if (totalNetWorth >= fireNumber) {
+      yearsToFire = 0; // Already have enough
+    } else if (avgMonthlySavings > 0 || totalNetWorth > 0) {
+      let portfolio = Math.max(0, totalNetWorth); // Don't start negative for projection
+      for (let month = 1; month <= 600; month++) {
         portfolio = portfolio * (1 + monthlyRate) + avgMonthlySavings;
-        // Compare against inflation-adjusted FIRE number
         const adjustedFire = fireNumber * Math.pow(1 + inflationPct / 100, month / 12);
         if (portfolio >= adjustedFire) {
           yearsToFire = Math.round((month / 12) * 10) / 10;
@@ -135,7 +144,7 @@ export async function GET() {
     }));
 
     // ═══ 6. COMPOUND INTEREST TABLE (1→30 years) ═══
-    const principal = totalNetWorth;
+    const principal = Math.max(0, totalNetWorth); // Don't compound negative values
     const monthlyContribution = avgMonthlySavings;
 
     const projections = Array.from({ length: 30 }, (_, i) => i + 1).map(years => {

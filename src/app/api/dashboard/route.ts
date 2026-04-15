@@ -39,8 +39,8 @@ export async function GET(req: Request) {
     allTx.forEach((tx: any) => {
       if (tx.type === "EXPENSE" && tx.fromAccountId) {
         balances[tx.fromAccountId] = (balances[tx.fromAccountId] || 0) - tx.amount;
-      } else if (tx.type === "INCOME" && tx.fromAccountId) {
-        balances[tx.fromAccountId] = (balances[tx.fromAccountId] || 0) + tx.amount;
+      } else if (tx.type === "INCOME" && tx.toAccountId) {
+        balances[tx.toAccountId] = (balances[tx.toAccountId] || 0) + tx.amount;
       } else if (tx.type === "TRANSFER" && tx.fromAccountId && tx.toAccountId) {
         balances[tx.fromAccountId] = (balances[tx.fromAccountId] || 0) - tx.amount;
         balances[tx.toAccountId] = (balances[tx.toAccountId] || 0) + tx.amount;

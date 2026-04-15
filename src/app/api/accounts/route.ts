@@ -97,3 +97,31 @@ export async function DELETE(req: Request) {
     return NextResponse.json({ error: "Xoá tài khoản thất bại" }, { status: 400 });
   }
 }
+
+// PATCH — update account (name, initialBalance, creditLimit, note)
+export async function PATCH(req: Request) {
+  const session = await auth();
+  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  try {
+    const body = await req.json();
+    const { id, name, initialBalance, creditLimit, note } = body;
+
+    if (!id) return NextResponse.json({ error: "Missing id" }, { status: 400 });
+
+    const updateData: any = {};
+    if (name !== undefined) updateData.name = name;
+    if (initialBalance !== undefined) updateData.initialBalance = Number(initialBalance) || 0;
+    if (creditLimit !== undefined) updateData.creditLimit = creditLimit ? Number(creditLimit) : null;
+    if (note !== undefined) updateData.note = note;
+
+    const account = await prisma.account.update({
+      where: { id },
+      data: updateData,
+    });
+
+    return NextResponse.json(account);
+  } catch (error) {
+    return NextResponse.json({ error: "Cập nhật tài khoản thất bại" }, { status: 400 });
+  }
+}
