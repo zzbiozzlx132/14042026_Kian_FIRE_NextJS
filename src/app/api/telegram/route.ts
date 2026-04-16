@@ -577,20 +577,13 @@ export async function POST(req: Request) {
           const txId12 = result.txId.slice(0, 12);
           await answerCallback(token, callbackId, "Đã lưu!");
 
-          // EXPENSE: show classification buttons
+          // EXPENSE: show essential classification (1 row only — rating edit on web)
           if (decoded.type === "EXPENSE") {
             const rKeyButtons = {
-              inline_keyboard: [
-                [
-                  { text: "Thiết yếu", callback_data: `RKEY|${txId12}|E` },
-                  { text: "Không thiết yếu", callback_data: `RKEY|${txId12}|N` },
-                ],
-                [
-                  { text: "Xứng đáng", callback_data: `RKEY|${txId12}|W` },
-                  { text: "Bình thường", callback_data: `RKEY|${txId12}|B` },
-                  { text: "Phí tiền", callback_data: `RKEY|${txId12}|P` },
-                ],
-              ],
+              inline_keyboard: [[
+                { text: "Thiết yếu", callback_data: `RKEY|${txId12}|E` },
+                { text: "Không thiết yếu", callback_data: `RKEY|${txId12}|N` },
+              ]],
             };
             await editMessage(
               token, chatId, messageId,
@@ -598,7 +591,7 @@ export async function POST(req: Request) {
               `📝 ${fullDesc}` +
               `${result.categoryName ? `\n🏷 ${result.categoryName}` : ""}` +
               `${result.accountName ? `\n💳 ${result.accountName}` : ""}` +
-              `\n\n✅ <b>Đã lưu!</b> Phân loại giao dịch:`,
+              `\n\n✅ <b>Đã lưu!</b> Thiết yếu không?`,
               rKeyButtons
             );
           } else {
