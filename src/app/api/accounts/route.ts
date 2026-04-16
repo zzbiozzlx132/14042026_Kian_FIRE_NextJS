@@ -109,11 +109,13 @@ export async function PATCH(req: Request) {
 
     if (!id) return NextResponse.json({ error: "Missing id" }, { status: 400 });
 
+    const { aliases } = body;
     const updateData: any = {};
     if (name !== undefined) updateData.name = name;
     if (initialBalance !== undefined) updateData.initialBalance = Number(initialBalance) || 0;
     if (creditLimit !== undefined) updateData.creditLimit = creditLimit ? Number(creditLimit) : null;
     if (note !== undefined) updateData.note = note;
+    if (aliases !== undefined) updateData.aliases = aliases;
 
     const account = await prisma.account.update({
       where: { id },

@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useSession } from "next-auth/react";
-import { UserCircle, List, Users, Plus, Trash2, Shield, Send, AlertTriangle, X } from "lucide-react";
+import { UserCircle, List, Users, Plus, Trash2, Shield, Send, AlertTriangle, X, Pencil } from "lucide-react";
 import { toast } from "sonner";
 
 export default function SettingsPage() {
@@ -408,6 +408,12 @@ function TelegramPanel() {
   const [tokenMasked, setTokenMasked] = useState("");
   const [disconnectConfirm, setDisconnectConfirm] = useState(false);
 
+  // Aliases management
+  const [accounts, setAccounts] = useState<any[]>([]);
+  const [aliasModal, setAliasModal] = useState<any>(null); // account being edited
+  const [aliasInput, setAliasInput] = useState("");
+  const [aliasSaving, setAliasSaving] = useState(false);
+
   useEffect(() => {
     fetch("/api/settings/telegram")
       .then(r => r.json())
@@ -417,7 +423,35 @@ function TelegramPanel() {
         setTokenMasked(data.tokenMasked || "");
       })
       .finally(() => setLoading(false));
+    // Load accounts for alias management
+    fetch("/api/accounts").then(r => r.json()).then(d => { if (Array.isArray(d)) setAccounts(d); });
   }, []);
+
+  const openAliasModal = (acc: any) => {
+    setAliasModal(acc);
+    setAliasInput(acc.aliases || "");
+  };
+
+  const handleSaveAliases = async () => {
+    if (!aliasModal) return;
+    setAliasSaving(true);
+    // Normalise: lowercase, remove extra spaces
+    const cleaned = aliasInput.split(/[,\s]+/).filter(Boolean).map((s: string) => s.toLowerCase().trim()).join(", ");
+    const res = await fetch("/api/accounts", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: aliasModal.id, aliases: cleaned }),
+    });
+    if (res.ok) {
+      const updated = await res.json();
+      setAccounts(prev => prev.map(a => a.id === updated.id ? { ...a, aliases: updated.aliases } : a));
+      toast.success("Đã lưu từ viết tắt");
+      setAliasModal(null);
+    } else {
+      toast.error("Lưu thất bại");
+    }
+    setAliasSaving(false);
+  };
 
   const handleConnect = async () => {
     if (!token.trim()) {
@@ -538,6 +572,45 @@ function TelegramPanel() {
         )}
       </div>
 
+      {/* Aliases Management — always visible */}
+      <div className="card p-6">
+        <div className="section-label mb-1">Từ viết tắt tài khoản</div>
+        <p className="text-xs text-[var(--text-muted)] mb-4">
+          Nhắn <code className="px-1 py-0.5 bg-[var(--bg-input)] rounded">chi 20k cafe vcb</code> → bot tự chọn đúng tài khoản.
+        </p>
+        {accounts.filter(a => a.type !== "CREDIT_CARD").length === 0 ? (
+          <p className="text-sm text-[var(--text-muted)]">Chưa có tài khoản nào.</p>
+        ) : (
+          <div className="space-y-2">
+            {accounts.filter(a => a.type !== "CREDIT_CARD").map(acc => (
+              <div key={acc.id} className="flex items-center gap-3 p-3 rounded-xl border border-[var(--border)] hover:border-[var(--accent)] transition-colors group">
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm font-semibold">{acc.name}</div>
+                  <div className="flex flex-wrap gap-1 mt-1">
+                    {acc.aliases ? (
+                      acc.aliases.split(/[,\s]+/).filter(Boolean).map((alias: string, i: number) => (
+                        <span key={i} className="text-[10px] px-2 py-0.5 rounded-full bg-[var(--accent-muted)] text-[var(--accent)] font-semibold">
+                          {alias}
+                        </span>
+                      ))
+                    ) : (
+                      <span className="text-[11px] text-[var(--text-muted)] italic">Chưa có từ viết tắt</span>
+                    )}
+                  </div>
+                </div>
+                <button
+                  onClick={() => openAliasModal(acc)}
+                  className="opacity-0 group-hover:opacity-100 p-1.5 rounded-lg hover:bg-[var(--accent-muted)] text-[var(--text-muted)] hover:text-[var(--accent)] transition-all"
+                  title="Sửa từ viết tắt"
+                >
+                  <Pencil size={14} />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
       {connected && (
         <div className="card p-6">
           <div className="section-label">Cách sử dụng</div>
@@ -553,6 +626,55 @@ function TelegramPanel() {
             <div className="p-3 rounded-lg bg-[var(--bg-input)]">
               <div className="font-semibold text-[var(--info)] mb-1">Xem thông tin</div>
               <code className="text-xs">/balance</code> — Số dư · <code className="text-xs">/today</code> — Hôm nay · <code className="text-xs">/help</code>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Alias Edit Modal */}
+      {aliasModal && (
+        <div className="modal-overlay" onClick={() => setAliasModal(null)}>
+          <div className="modal-content max-w-md" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h3 className="font-bold">Từ viết tắt</h3>
+                <p className="text-sm text-[var(--text-muted)]">{aliasModal.name}</p>
+              </div>
+              <button onClick={() => setAliasModal(null)} className="text-[var(--text-muted)] hover:text-[var(--text-primary)]">
+                <X size={20} />
+              </button>
+            </div>
+
+            <div className="form-group">
+              <label className="form-label">Từ viết tắt (phân cách bằng dấu phẩy)</label>
+              <input
+                className="input"
+                placeholder="VD: vcb, viet, vietcom"
+                value={aliasInput}
+                onChange={e => setAliasInput(e.target.value)}
+                autoFocus
+              />
+              <p className="text-xs text-[var(--text-muted)] mt-2">
+                Nhắn <code className="px-1 py-0.5 bg-[var(--bg-input)] rounded">chi 20k cafe vcb</code> → tự chọn <b>{aliasModal.name}</b>
+              </p>
+            </div>
+
+            {/* Preview chips */}
+            {aliasInput.trim() && (
+              <div className="flex flex-wrap gap-1.5 mb-4 p-3 rounded-xl bg-[var(--bg-input)]">
+                {aliasInput.split(/[,\s]+/).filter(Boolean).map((a, i) => (
+                  <span key={i} className="text-xs px-2.5 py-1 rounded-full bg-[var(--accent-muted)] text-[var(--accent)] font-semibold">
+                    {a.toLowerCase().trim()}
+                  </span>
+                ))}
+              </div>
+            )}
+
+            <div className="flex gap-3">
+              <button onClick={() => setAliasModal(null)} className="btn btn-ghost flex-1">Hủy</button>
+              <button onClick={handleSaveAliases} disabled={aliasSaving} className="btn btn-primary flex-1">
+                {aliasSaving ? "Đang lưu..." : "Lưu"}
+              </button>
             </div>
           </div>
         </div>

@@ -49,6 +49,9 @@ model Account {
   rewardType    String?  @default("none")
   openedDate    DateTime?
 
+  // Telegram shorthand aliases (comma-separated, e.g. "vcb,viet,vietcom")
+  aliases String @default("")
+
   transactionsFrom Transaction[] @relation("FromAccount")
   transactionsTo   Transaction[] @relation("ToAccount")
   goalLinks        Goal[]        @relation("LinkedAccount")

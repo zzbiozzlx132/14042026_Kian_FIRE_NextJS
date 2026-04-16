@@ -53,16 +53,26 @@ function normalizeVi(s: string): string {
 function accountMatchesQuery(query: string, account: any): boolean {
   const nq = normalizeVi(query);
   if (!nq || nq.length < 2) return false;
+
+  // 1. Ưu tiên: kiểm tra aliases tùy chỉnh (exact match)
+  if (account.aliases) {
+    const aliasList = account.aliases
+      .split(/[,\s]+/)
+      .filter(Boolean)
+      .map(normalizeVi);
+    if (aliasList.includes(nq)) return true;
+  }
+
   const nname = normalizeVi(account.name);
 
-  // Direct substring match (both ways)
+  // 2. Direct substring match
   if (nname.includes(nq) || nq.includes(nname)) return true;
 
-  // Abbreviation map lookup
+  // 3. Abbreviation map lookup
   const abbrevs = BANK_ABBREVS[nq];
   if (abbrevs) return abbrevs.some((a) => nname.includes(a));
 
-  // First-letter abbreviation (e.g. "mb" → "MBBank" first 2 letters)
+  // 4. Prefix match
   if (nname.startsWith(nq)) return true;
 
   return false;
