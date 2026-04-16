@@ -79,11 +79,11 @@ export default function NewTransactionPage() {
           amount,
           date,
           categoryId,
-          // INCOME: fromAccountId = tài khoản nhận (match dashboard calculation)
           // EXPENSE: fromAccountId = nguồn tiền
+          // INCOME: toAccountId = tài khoản nhận
           // TRANSFER: cả hai
-          fromAccountId: type === "INCOME" ? toAccountId : (fromAccountId || undefined),
-          toAccountId: type === "TRANSFER" ? (toAccountId || undefined) : undefined,
+          fromAccountId: (type === "EXPENSE" || type === "TRANSFER") ? (fromAccountId || undefined) : undefined,
+          toAccountId: (type === "INCOME" || type === "TRANSFER") ? (toAccountId || undefined) : undefined,
           description,
           essential: type === "EXPENSE" ? essential : undefined,
           rating: type === "EXPENSE" ? rating : undefined,

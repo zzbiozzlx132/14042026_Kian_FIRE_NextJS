@@ -2,6 +2,24 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/lib/auth";
 
+// GET single user
+export async function GET(req: Request, context: { params: Promise<{ id: string }> }) {
+  const session = await auth();
+  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const { id } = await context.params;
+  try {
+    const user = await prisma.user.findUnique({
+      where: { id },
+      select: { id: true, name: true, email: true, role: true }
+    });
+    if (!user) return NextResponse.json({ error: "Không tìm thấy" }, { status: 404 });
+    return NextResponse.json(user);
+  } catch {
+    return NextResponse.json({ error: "Lỗi truy vấn" }, { status: 400 });
+  }
+}
+
 // DELETE user
 export async function DELETE(req: Request, context: { params: Promise<{ id: string }> }) {
   const session = await auth();

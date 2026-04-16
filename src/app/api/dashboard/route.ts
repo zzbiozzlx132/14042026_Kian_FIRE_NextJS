@@ -1,31 +1,34 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/lib/auth";
-import { startOfMonth, endOfMonth, subMonths } from "date-fns";
+import { startOfMonth, endOfMonth, subMonths, format } from "date-fns";
 
 export async function GET(req: Request) {
   try {
     const session = await auth();
     if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-    const now = new Date();
-    const currentMonthStart = startOfMonth(now);
-    const currentMonthEnd = endOfMonth(now);
+    // Support ?month=2026-04 parameter
+    const { searchParams } = new URL(req.url);
+    const monthParam = searchParams.get("month"); // format: YYYY-MM
+    
+    let targetDate = new Date();
+    if (monthParam) {
+      const [y, m] = monthParam.split("-").map(Number);
+      targetDate = new Date(y, m - 1, 15);
+    }
+
+    const currentMonthStart = startOfMonth(targetDate);
+    const currentMonthEnd = endOfMonth(targetDate);
+    const prevMonthStart = startOfMonth(subMonths(targetDate, 1));
+    const prevMonthEnd = endOfMonth(subMonths(targetDate, 1));
 
     const accounts = await prisma.account.findMany({
       where: { status: "active" },
     });
 
-    const txBaseFields = {
-      amount: true,
-      type: true,
-      fromAccountId: true,
-      toAccountId: true,
-      date: true,
-    };
-
     const allTx = await prisma.transaction.findMany({
-      select: txBaseFields,
+      select: { amount: true, type: true, fromAccountId: true, toAccountId: true, date: true },
     });
 
     // 1. Calculate Balances
@@ -88,16 +91,10 @@ export async function GET(req: Request) {
 
     const netWorth = totalAssets - totalDebtAmount;
 
-    // 4. Monthly Flow
+    // 4. Monthly Flow — selected month
     const txThisMonth = await prisma.transaction.findMany({
-      where: {
-        date: { gte: currentMonthStart, lte: currentMonthEnd }
-      },
-      include: {
-        category: true,
-        fromAccount: true,
-        toAccount: true
-      },
+      where: { date: { gte: currentMonthStart, lte: currentMonthEnd } },
+      include: { category: true, fromAccount: true, toAccount: true },
       orderBy: { date: "desc" }
     });
 
@@ -108,13 +105,30 @@ export async function GET(req: Request) {
       if (tx.type === "INCOME") monthlyIncome += tx.amount;
       else if (tx.type === "EXPENSE") monthlyExpense += tx.amount;
       else if (tx.type === "TRANSFER") {
-        // Advanced logic from KianAppScript:
-        // normal -> credit = expense
-        // credit -> normal = income
         const fromType = tx.fromAccount?.type;
         const toType = tx.toAccount?.type;
         if (fromType !== "CREDIT_CARD" && toType === "CREDIT_CARD") monthlyExpense += tx.amount;
         if (fromType === "CREDIT_CARD" && toType !== "CREDIT_CARD") monthlyIncome += tx.amount;
+      }
+    });
+
+    // 5. Previous month for comparison
+    const txPrevMonth = await prisma.transaction.findMany({
+      where: { date: { gte: prevMonthStart, lte: prevMonthEnd } },
+      include: { fromAccount: true, toAccount: true },
+    });
+
+    let prevIncome = 0;
+    let prevExpense = 0;
+
+    txPrevMonth.forEach((tx: any) => {
+      if (tx.type === "INCOME") prevIncome += tx.amount;
+      else if (tx.type === "EXPENSE") prevExpense += tx.amount;
+      else if (tx.type === "TRANSFER") {
+        const fromType = tx.fromAccount?.type;
+        const toType = tx.toAccount?.type;
+        if (fromType !== "CREDIT_CARD" && toType === "CREDIT_CARD") prevExpense += tx.amount;
+        if (fromType === "CREDIT_CARD" && toType !== "CREDIT_CARD") prevIncome += tx.amount;
       }
     });
 
@@ -126,6 +140,9 @@ export async function GET(req: Request) {
       totalInvest,
       monthlyIncome,
       monthlyExpense,
+      prevIncome,
+      prevExpense,
+      selectedMonth: format(targetDate, "yyyy-MM"),
       recentTransactions: txThisMonth.slice(0, 5),
     });
 
@@ -134,7 +151,9 @@ export async function GET(req: Request) {
     return NextResponse.json({
       error: "Internal Server Error",
       netWorth: 0, totalAssets: 0, totalDebt: 0, totalCredit: 0,
-      totalInvest: 0, monthlyIncome: 0, monthlyExpense: 0, recentTransactions: []
+      totalInvest: 0, monthlyIncome: 0, monthlyExpense: 0,
+      prevIncome: 0, prevExpense: 0, selectedMonth: "",
+      recentTransactions: []
     }, { status: 500 });
   }
 }

@@ -403,9 +403,9 @@ function AddInvestmentModal({ onClose, onCreated }: { onClose: () => void; onCre
           </div>
           <div className="form-group"><label className="form-label">Loại đầu tư</label>
             <select className="input" value={form.type} onChange={e => setForm({...form, type: e.target.value})}>
-              <option value="GOLD">🥇 Vàng</option><option value="STOCK">📈 Cổ phiếu</option>
-              <option value="CRYPTO">₿ Crypto</option><option value="TERM_DEPOSIT">🏦 Tiết kiệm kỳ hạn</option>
-              <option value="REAL_ESTATE">🏠 Bất động sản</option><option value="OTHER">📦 Khác</option>
+              <option value="GOLD">Vàng</option><option value="STOCK">Cổ phiếu</option>
+              <option value="CRYPTO">Crypto</option><option value="TERM_DEPOSIT">Tiết kiệm kỳ hạn</option>
+              <option value="REAL_ESTATE">Bất động sản</option><option value="OTHER">Khác</option>
             </select>
           </div>
           <div className="form-group"><label className="form-label">Khối lượng ({unit})</label>

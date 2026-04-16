@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { UserCircle, List, Users, Plus, Trash2, Shield, Send } from "lucide-react";
+import { useSession } from "next-auth/react";
+import { UserCircle, List, Users, Plus, Trash2, Shield, Send, AlertTriangle, X } from "lucide-react";
 import { toast } from "sonner";
 
 export default function SettingsPage() {
@@ -191,6 +192,7 @@ function CategoriesPanel() {
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({ name: "", type: "EXPENSE" });
   const [loading, setLoading] = useState(false);
+  const [deleteCat, setDeleteCat] = useState<any>(null);
 
   useEffect(() => {
     fetch("/api/categories").then(r => r.json()).then(d => { if (Array.isArray(d)) setCategories(d); });
@@ -216,15 +218,17 @@ function CategoriesPanel() {
     setLoading(false);
   };
 
-  const handleDelete = async (id: string) => {
-    const res = await fetch(`/api/categories?id=${id}`, { method: "DELETE" });
+  const handleDelete = async () => {
+    if (!deleteCat) return;
+    const res = await fetch(`/api/categories?id=${deleteCat.id}`, { method: "DELETE" });
     if (res.ok) {
-      setCategories(prev => prev.filter(c => c.id !== id));
+      setCategories(prev => prev.filter(c => c.id !== deleteCat.id));
       toast.success("Đã xoá hạng mục");
     } else {
       const data = await res.json();
       toast.error(data.error || "Xoá thất bại");
     }
+    setDeleteCat(null);
   };
 
   const expenses = categories.filter(c => c.type === "EXPENSE");
@@ -271,7 +275,7 @@ function CategoriesPanel() {
           ) : expenses.map(c => (
             <span key={c.id} className="badge border border-[var(--border)] text-[var(--text-secondary)] px-3 py-1.5 group inline-flex items-center gap-1.5">
               {c.name}
-              <button onClick={() => handleDelete(c.id)} className="opacity-0 group-hover:opacity-100 text-[var(--danger)] hover:scale-125 transition-all" title="Xoá">×</button>
+              <button onClick={() => setDeleteCat(c)} className="opacity-0 group-hover:opacity-100 text-[var(--danger)] hover:scale-125 transition-all" title="Xoá">×</button>
             </span>
           ))}
         </div>
@@ -285,17 +289,38 @@ function CategoriesPanel() {
           ) : incomes.map(c => (
             <span key={c.id} className="badge border border-[var(--border)] text-[var(--text-secondary)] px-3 py-1.5 group inline-flex items-center gap-1.5">
               {c.name}
-              <button onClick={() => handleDelete(c.id)} className="opacity-0 group-hover:opacity-100 text-[var(--danger)] hover:scale-125 transition-all" title="Xoá">×</button>
+              <button onClick={() => setDeleteCat(c)} className="opacity-0 group-hover:opacity-100 text-[var(--danger)] hover:scale-125 transition-all" title="Xoá">×</button>
             </span>
           ))}
         </div>
       </div>
+
+      {deleteCat && (
+        <div className="modal-overlay" onClick={() => setDeleteCat(null)}>
+          <div className="modal-content max-w-sm" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-xl bg-red-50 text-red-600 flex items-center justify-center flex-shrink-0">
+                <AlertTriangle size={20} />
+              </div>
+              <div>
+                <h3 className="font-bold">Xoá hạng mục?</h3>
+                <p className="text-sm text-[var(--text-muted)]">Xoá &quot;{deleteCat.name}&quot; không thể hoàn tác.</p>
+              </div>
+            </div>
+            <div className="flex gap-3">
+              <button onClick={() => setDeleteCat(null)} className="btn btn-ghost flex-1">Hủy</button>
+              <button onClick={handleDelete} className="btn flex-1 bg-[var(--danger)] text-white hover:opacity-90">Xoá</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
 /* ═══════ PROFILE PANEL ═══════ */
 function ProfilePanel() {
+  const { data: session } = useSession();
   const [user, setUser] = useState<any>(null);
   const [name, setName] = useState("");
   const [newPassword, setNewPassword] = useState("");
@@ -303,15 +328,14 @@ function ProfilePanel() {
   const [savingPw, setSavingPw] = useState(false);
 
   useEffect(() => {
-    fetch("/api/users").then(r => r.json()).then(d => {
-      if (Array.isArray(d) && d.length > 0) {
-        // Find from session or first admin
-        const admin = d.find((u: any) => u.role === "ADMIN") || d[0];
-        setUser(admin);
-        setName(admin.name || "");
+    if (!session?.user?.id) return;
+    fetch(`/api/users/${session.user.id}`).then(r => r.json()).then(d => {
+      if (d && d.id) {
+        setUser(d);
+        setName(d.name || "");
       }
     });
-  }, []);
+  }, [session?.user?.id]);
 
   const handleSaveName = async () => {
     if (!user || !name) return;
@@ -382,6 +406,7 @@ function TelegramPanel() {
   const [connected, setConnected] = useState(false);
   const [botInfo, setBotInfo] = useState<{ username: string; name: string } | null>(null);
   const [tokenMasked, setTokenMasked] = useState("");
+  const [disconnectConfirm, setDisconnectConfirm] = useState(false);
 
   useEffect(() => {
     fetch("/api/settings/telegram")
@@ -423,7 +448,6 @@ function TelegramPanel() {
   };
 
   const handleDisconnect = async () => {
-    if (!confirm("Ngắt kết nối Telegram bot?")) return;
     setSaving(true);
     try {
       const res = await fetch("/api/settings/telegram", { method: "DELETE" });
@@ -438,6 +462,7 @@ function TelegramPanel() {
       toast.error("Lỗi ngắt kết nối");
     }
     setSaving(false);
+    setDisconnectConfirm(false);
   };
 
   if (loading) {
@@ -448,10 +473,10 @@ function TelegramPanel() {
     <div className="space-y-6">
       <div className="card p-6">
         <div className="flex items-center justify-between mb-4">
-          <h2 className="section-title mb-0">🤖 Telegram Bot</h2>
+          <div className="section-label mb-0">Telegram Bot</div>
           {connected && (
-            <span className="text-xs font-semibold px-3 py-1 rounded-full bg-green-50 text-green-600">
-              ✅ Đã kết nối
+            <span className="text-xs font-semibold px-3 py-1 rounded-full bg-green-50 text-green-600 border border-green-200">
+              Đã kết nối
             </span>
           )}
         </div>
@@ -459,7 +484,9 @@ function TelegramPanel() {
         {connected && botInfo ? (
           <div className="space-y-4">
             <div className="flex items-center gap-4 p-4 rounded-xl bg-[var(--bg-input)]">
-              <div className="w-12 h-12 rounded-full bg-blue-100 flex items-center justify-center text-2xl">🤖</div>
+              <div className="w-12 h-12 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center">
+                <Send size={22} />
+              </div>
               <div>
                 <div className="font-semibold">@{botInfo.username}</div>
                 <div className="text-sm text-[var(--text-muted)]">{botInfo.name}</div>
@@ -467,11 +494,11 @@ function TelegramPanel() {
               </div>
             </div>
             <button
-              onClick={handleDisconnect}
+              onClick={() => setDisconnectConfirm(true)}
               disabled={saving}
               className="w-full py-2 rounded-xl border border-[var(--danger)] text-[var(--danger)] hover:bg-red-50 transition-colors text-sm font-medium"
             >
-              {saving ? "Đang ngắt..." : "Ngắt kết nối"}
+              Ngắt kết nối
             </button>
           </div>
         ) : (
@@ -505,7 +532,7 @@ function TelegramPanel() {
               disabled={saving || !token.trim()}
               className="btn btn-primary w-full"
             >
-              {saving ? "Đang kết nối..." : "🔗 Kết nối Bot"}
+              {saving ? "Đang kết nối..." : "Kết nối Bot"}
             </button>
           </div>
         )}
@@ -513,19 +540,42 @@ function TelegramPanel() {
 
       {connected && (
         <div className="card p-6">
-          <h3 className="section-title">📝 Cách sử dụng</h3>
+          <div className="section-label">Cách sử dụng</div>
           <div className="space-y-3 text-sm">
             <div className="p-3 rounded-lg bg-[var(--bg-input)]">
-              <div className="font-semibold text-[var(--accent)] mb-1">Nhập chi tiêu</div>
+              <div className="font-semibold text-[var(--danger)] mb-1">Nhập chi tiêu</div>
               <code className="text-xs">chi 50k cà phê</code> · <code className="text-xs">chi 1.5tr tiền nhà</code>
             </div>
             <div className="p-3 rounded-lg bg-[var(--bg-input)]">
-              <div className="font-semibold text-green-600 mb-1">Nhập thu nhập</div>
+              <div className="font-semibold text-[var(--success)] mb-1">Nhập thu nhập</div>
               <code className="text-xs">thu 5tr lương</code> · <code className="text-xs">thu 500k freelance</code>
             </div>
             <div className="p-3 rounded-lg bg-[var(--bg-input)]">
-              <div className="font-semibold text-blue-600 mb-1">Xem thông tin</div>
+              <div className="font-semibold text-[var(--info)] mb-1">Xem thông tin</div>
               <code className="text-xs">/balance</code> — Số dư · <code className="text-xs">/today</code> — Hôm nay · <code className="text-xs">/help</code>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Disconnect Confirm Modal */}
+      {disconnectConfirm && (
+        <div className="modal-overlay" onClick={() => setDisconnectConfirm(false)}>
+          <div className="modal-content max-w-sm" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-xl bg-red-50 text-red-600 flex items-center justify-center flex-shrink-0">
+                <AlertTriangle size={20} />
+              </div>
+              <div>
+                <h3 className="font-bold">Ngắt kết nối Telegram?</h3>
+                <p className="text-sm text-[var(--text-muted)]">Bot sẽ ngừng nhận lệnh từ bạn.</p>
+              </div>
+            </div>
+            <div className="flex gap-3">
+              <button onClick={() => setDisconnectConfirm(false)} className="btn btn-ghost flex-1">Hủy</button>
+              <button onClick={handleDisconnect} disabled={saving} className="btn flex-1 bg-[var(--danger)] text-white hover:opacity-90">
+                {saving ? "Đang ngắt..." : "Ngắt kết nối"}
+              </button>
             </div>
           </div>
         </div>
