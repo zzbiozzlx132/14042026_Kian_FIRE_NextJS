@@ -284,7 +284,7 @@ async function saveTransaction(
     orderBy: { createdAt: "asc" },
   });
 
-  await prisma.transaction.create({
+  const tx = await prisma.transaction.create({
     data: {
       date: new Date(),
       type,
@@ -300,6 +300,7 @@ async function saveTransaction(
   });
 
   return {
+    txId: tx.id,
     accountName: targetAccount?.name,
     categoryName: category?.name,
   };
@@ -514,6 +515,37 @@ export async function POST(req: Request) {
       const chatId = cb.message.chat.id;
       const messageId = cb.message.message_id;
       const callbackId = cb.id;
+
+      // ── RKEY — classify essential/rating (handle before generic decode) ──
+      if (cb.data?.startsWith("RKEY|")) {
+        const parts = cb.data.split("|");
+        if (parts.length === 3) {
+          const txId12 = parts[1];
+          const code = parts[2];
+          try {
+            const allTx = await prisma.transaction.findMany({ where: { type: "EXPENSE" }, orderBy: { createdAt: "desc" }, take: 100 });
+            const tx = allTx.find((t: any) => t.id.startsWith(txId12));
+            if (tx) {
+              const updateData: any = {};
+              if (code === "E") { updateData.essential = "ESSENTIAL"; }
+              else if (code === "N") { updateData.essential = "NON_ESSENTIAL"; }
+              else if (code === "W") { updateData.rating = "WORTHY"; }
+              else if (code === "B") { updateData.rating = "NORMAL"; }
+              else if (code === "P") { updateData.rating = "WASTEFUL"; }
+              await prisma.transaction.update({ where: { id: tx.id }, data: updateData });
+            }
+            const labels: Record<string, string> = { E: "Thiết yếu", N: "Không thiết yếu", W: "Xứng đáng", B: "Bình thường", P: "Phí tiền" };
+            await answerCallback(token, callbackId, `Đã đánh dấu: ${labels[code] || code}`);
+            const originalText = cb.message?.text || "";
+            const newText = originalText.replace(/\n\n✅ <b>Đã lưu!<\/b> Phân loại giao dịch:/, `\n\n✅ <b>Đã lưu!</b> · ${labels[code] || code}`);
+            await editMessage(token, chatId, messageId, newText);
+          } catch {
+            await answerCallback(token, callbackId, "Lỗi cập nhật");
+          }
+        }
+        return NextResponse.json({ ok: true });
+      }
+
       const decoded = decodeCallback(cb.data);
 
       if (!decoded) {
@@ -531,23 +563,54 @@ export async function POST(req: Request) {
       // ── SAVE ──
       if (decoded.action === "SAVE" || decoded.action === "ACCS") {
         try {
+          // Recover full description from message text to avoid callback truncation
+          const msgText: string = cb.message?.text || "";
+          const descMatch = msgText.match(/📝 (.+?)(?:\n|$)/);
+          const fullDesc = descMatch ? descMatch[1].trim() : decoded.description;
+
           const result = await saveTransaction(
             decoded.type,
             decoded.amount,
-            decoded.description,
+            fullDesc,
             decoded.accountIdShort
           );
-          const sign = decoded.type === "EXPENSE" ? "-" : "+";
-          const typeName = decoded.type === "EXPENSE" ? "Chi" : "Thu";
+          const txId12 = result.txId.slice(0, 12);
           await answerCallback(token, callbackId, "Đã lưu!");
-          await editMessage(
-            token, chatId, messageId,
-            `${decoded.type === "EXPENSE" ? "🔴" : "🟢"} <b>${typeName}:</b> ${sign}${fmtVND(decoded.amount)}\n` +
-            `📝 ${decoded.description}` +
-            `${result.categoryName ? `\n🏷 ${result.categoryName}` : ""}` +
-            `${result.accountName ? `\n💳 ${result.accountName}` : ""}` +
-            `\n\n✅ <b>Đã lưu thành công!</b>`
-          );
+
+          // EXPENSE: show classification buttons
+          if (decoded.type === "EXPENSE") {
+            const rKeyButtons = {
+              inline_keyboard: [
+                [
+                  { text: "Thiết yếu", callback_data: `RKEY|${txId12}|E` },
+                  { text: "Không thiết yếu", callback_data: `RKEY|${txId12}|N` },
+                ],
+                [
+                  { text: "Xứng đáng", callback_data: `RKEY|${txId12}|W` },
+                  { text: "Bình thường", callback_data: `RKEY|${txId12}|B` },
+                  { text: "Phí tiền", callback_data: `RKEY|${txId12}|P` },
+                ],
+              ],
+            };
+            await editMessage(
+              token, chatId, messageId,
+              `🔴 <b>Chi:</b> -${fmtVND(decoded.amount)}\n` +
+              `📝 ${fullDesc}` +
+              `${result.categoryName ? `\n🏷 ${result.categoryName}` : ""}` +
+              `${result.accountName ? `\n💳 ${result.accountName}` : ""}` +
+              `\n\n✅ <b>Đã lưu!</b> Phân loại giao dịch:`,
+              rKeyButtons
+            );
+          } else {
+            await editMessage(
+              token, chatId, messageId,
+              `🟢 <b>Thu:</b> +${fmtVND(decoded.amount)}\n` +
+              `📝 ${fullDesc}` +
+              `${result.categoryName ? `\n🏷 ${result.categoryName}` : ""}` +
+              `${result.accountName ? `\n💳 ${result.accountName}` : ""}` +
+              `\n\n✅ <b>Đã lưu thành công!</b>`
+            );
+          }
         } catch {
           await answerCallback(token, callbackId, "Lỗi lưu");
           await editMessage(token, chatId, messageId, "❌ Lỗi khi lưu. Thử lại.");
@@ -558,7 +621,7 @@ export async function POST(req: Request) {
       // ── ACCT — show account selection ──
       if (decoded.action === "ACCT") {
         const accounts = await prisma.account.findMany({
-          where: { status: "active", type: { in: ["CASH", "BANK", "E_WALLET", "SAVINGS"] } },
+          where: { status: "active", type: { in: ["CASH", "BANK", "E_WALLET", "SAVINGS", "CREDIT_CARD"] } },
           orderBy: { createdAt: "asc" },
         });
 
@@ -569,7 +632,7 @@ export async function POST(req: Request) {
 
         const acctButtons = accounts.map((a: any) => ({
           text: `${a.name}`,
-          callback_data: encodeCallback("ACCS", decoded.type, decoded.amount, decoded.description, a.id.slice(0, 12)),
+          callback_data: encodeCallback("ACCS", decoded.type, decoded.amount, decoded.description, a.id.slice(0, 20)),
         }));
 
         // Chia thành hàng 2 nút
@@ -671,7 +734,7 @@ export async function POST(req: Request) {
     );
     const finalDesc = cleanDesc || parsed.description;
     const selectedAccount = detectedAccount || accounts[0] || null;
-    const accountIdShort = selectedAccount?.id?.slice(0, 12);
+    const accountIdShort = selectedAccount?.id?.slice(0, 20);
 
     const buttons = buildConfirmButtons(
       parsed.type,

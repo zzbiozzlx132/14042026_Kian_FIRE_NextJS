@@ -133,9 +133,20 @@ export default function TransactionsPage() {
                 }`}>
                   {tx.type === "INCOME" ? "+" : tx.type === "EXPENSE" ? "-" : ""}{fmtMoney(tx.amount)}
                 </div>
-                {tx.essential && (
-                  <div className="text-[10px] text-[var(--text-muted)]">
-                    {tx.essential === "ESSENTIAL" ? "Thiết yếu" : "Không thiết yếu"}
+                {(tx.essential || tx.rating) && (
+                  <div className="flex items-center justify-end gap-1 mt-1 flex-wrap">
+                    {tx.essential === "ESSENTIAL" && (
+                      <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-700 font-medium">Thiết yếu</span>
+                    )}
+                    {tx.essential === "NON_ESSENTIAL" && (
+                      <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-[var(--bg-input)] text-[var(--text-muted)] font-medium">Không TY</span>
+                    )}
+                    {tx.rating === "WORTHY" && (
+                      <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-700 font-medium">Xứng đáng</span>
+                    )}
+                    {tx.rating === "WASTEFUL" && (
+                      <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-red-100 text-red-700 font-medium">Phí tiền</span>
+                    )}
                   </div>
                 )}
               </div>

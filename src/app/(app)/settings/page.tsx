@@ -413,6 +413,7 @@ function TelegramPanel() {
   const [aliasModal, setAliasModal] = useState<any>(null); // account being edited
   const [aliasInput, setAliasInput] = useState("");
   const [aliasSaving, setAliasSaving] = useState(false);
+  const [aliasError, setAliasError] = useState<string[]>([]);
 
   useEffect(() => {
     fetch("/api/settings/telegram")
@@ -430,15 +431,36 @@ function TelegramPanel() {
   const openAliasModal = (acc: any) => {
     setAliasModal(acc);
     setAliasInput(acc.aliases || "");
+    setAliasError([]);
   };
 
   const handleSaveAliases = async () => {
     if (!aliasModal) return;
     setAliasSaving(true);
+    setAliasError([]);
+
     // Normalise: lowercase, deduplicate, remove extra spaces
-    const cleaned = [...new Set(
+    const newAliases = [...new Set(
       aliasInput.split(/[,\s]+/).filter(Boolean).map((s: string) => s.toLowerCase().trim())
-    )].join(", ");
+    )];
+
+    // Cross-account conflict check
+    const conflicts: string[] = [];
+    for (const alias of newAliases) {
+      const owner = accounts.find(a =>
+        a.id !== aliasModal.id &&
+        a.aliases &&
+        a.aliases.split(/[,\s]+/).filter(Boolean).map((s: string) => s.toLowerCase().trim()).includes(alias)
+      );
+      if (owner) conflicts.push(`"${alias}" đã dùng bởi ${owner.name}`);
+    }
+    if (conflicts.length > 0) {
+      setAliasError(conflicts);
+      setAliasSaving(false);
+      return;
+    }
+
+    const cleaned = newAliases.join(", ");
     const res = await fetch("/api/accounts", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
@@ -648,12 +670,12 @@ function TelegramPanel() {
             </div>
 
             <div className="form-group">
-              <label className="form-label">Từ viết tắt (phân cách bằng dấu phẩy)</label>
+              <label className="form-label">Từ viết tắt (phân cách bằng dấu phẩy hoặc dấu cách)</label>
               <input
-                className="input"
+                className={`input ${aliasError.length > 0 ? "border-[var(--danger)]" : ""}`}
                 placeholder="VD: vcb, viet, vietcom"
                 value={aliasInput}
-                onChange={e => setAliasInput(e.target.value)}
+                onChange={e => { setAliasInput(e.target.value); setAliasError([]); }}
                 autoFocus
               />
               <p className="text-xs text-[var(--text-muted)] mt-2">
@@ -661,14 +683,24 @@ function TelegramPanel() {
               </p>
             </div>
 
-            {/* Preview chips */}
+            {/* Preview chips — deduplicated */}
             {aliasInput.trim() && (
-              <div className="flex flex-wrap gap-1.5 mb-4 p-3 rounded-xl bg-[var(--bg-input)]">
-                {aliasInput.split(/[,\s]+/).filter(Boolean).map((a, i) => (
+              <div className="flex flex-wrap gap-1.5 mb-3 p-3 rounded-xl bg-[var(--bg-input)]">
+                {[...new Set(aliasInput.split(/[,\s]+/).filter(Boolean).map((a: string) => a.toLowerCase().trim()))].map((a, i) => (
                   <span key={i} className="text-xs px-2.5 py-1 rounded-full bg-[var(--accent-muted)] text-[var(--accent)] font-semibold">
-                    {a.toLowerCase().trim()}
+                    {a}
                   </span>
                 ))}
+              </div>
+            )}
+
+            {/* Cross-account conflict errors */}
+            {aliasError.length > 0 && (
+              <div className="flex items-start gap-2 mb-4 p-3 rounded-xl bg-red-50 border border-red-200 text-red-700">
+                <AlertTriangle size={15} className="flex-shrink-0 mt-0.5" />
+                <div className="text-xs space-y-0.5">
+                  {aliasError.map((e, i) => <div key={i}>{e}</div>)}
+                </div>
               </div>
             )}
 

@@ -18,3 +18,24 @@ export async function DELETE(req: Request, context: { params: Promise<{ id: stri
     return NextResponse.json({ error: "Lỗi xoá giao dịch" }, { status: 400 });
   }
 }
+
+export async function PATCH(req: Request, context: { params: Promise<{ id: string }> }) {
+  const session = await auth();
+  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  try {
+    const { id } = await context.params;
+    const body = await req.json();
+    const updateData: any = {};
+    if (body.essential !== undefined) updateData.essential = body.essential;
+    if (body.rating !== undefined) updateData.rating = body.rating;
+
+    const tx = await prisma.transaction.update({
+      where: { id },
+      data: updateData,
+    });
+    return NextResponse.json(tx);
+  } catch (error) {
+    return NextResponse.json({ error: "Cập nhật thất bại" }, { status: 400 });
+  }
+}
