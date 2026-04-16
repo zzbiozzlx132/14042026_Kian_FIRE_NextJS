@@ -2,9 +2,14 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Plus, Search, ArrowUpRight, ArrowDownRight, ArrowLeftRight, ReceiptText, AlertTriangle } from "lucide-react";
+import { Plus, Search, ArrowUpRight, ArrowDownRight, ArrowLeftRight, ReceiptText, AlertTriangle, Pencil, X } from "lucide-react";
 import { toast } from "sonner";
-import { fmtMoney, fmtDate } from "@/lib/utils";
+import { fmtMoney, fmtDate, parseAmount, formatAmountDisplay, today } from "@/lib/utils";
+import { cn } from "@/lib/utils";
+
+function toDateInput(iso: string): string {
+  return iso ? iso.slice(0, 10) : today();
+}
 
 export default function TransactionsPage() {
   const [transactions, setTransactions] = useState<any[]>([]);
@@ -12,11 +17,28 @@ export default function TransactionsPage() {
   const [search, setSearch] = useState("");
   const [deleteId, setDeleteId] = useState<string | null>(null);
 
+  // Edit
+  const [editTx, setEditTx] = useState<any | null>(null);
+  const [categories, setCategories] = useState<any[]>([]);
+  const [accounts, setAccounts] = useState<any[]>([]);
+  const [editType, setEditType] = useState<"EXPENSE"|"INCOME"|"TRANSFER">("EXPENSE");
+  const [editAmountRaw, setEditAmountRaw] = useState("");
+  const [editDate, setEditDate] = useState("");
+  const [editCategoryId, setEditCategoryId] = useState("");
+  const [editFromAccountId, setEditFromAccountId] = useState("");
+  const [editToAccountId, setEditToAccountId] = useState("");
+  const [editDescription, setEditDescription] = useState("");
+  const [editEssential, setEditEssential] = useState<"ESSENTIAL"|"NON_ESSENTIAL">("NON_ESSENTIAL");
+  const [editRating, setEditRating] = useState<"WORTHY"|"NORMAL"|"WASTEFUL">("NORMAL");
+  const [editSaving, setEditSaving] = useState(false);
+
   useEffect(() => {
     fetch("/api/transactions")
       .then(r => r.json())
       .then(d => { if (Array.isArray(d)) setTransactions(d); setLoading(false); })
       .catch(() => setLoading(false));
+    fetch("/api/categories").then(r => r.json()).then(d => { if (Array.isArray(d)) setCategories(d); });
+    fetch("/api/accounts").then(r => r.json()).then(d => { if (Array.isArray(d)) setAccounts(d); });
   }, []);
 
   const filtered = transactions.filter(tx => {
@@ -27,6 +49,50 @@ export default function TransactionsPage() {
       tx.category?.name?.toLowerCase().includes(s)
     );
   });
+
+  const openEdit = (tx: any) => {
+    setEditTx(tx);
+    setEditType(tx.type);
+    setEditAmountRaw(formatAmountDisplay(tx.amount));
+    setEditDate(toDateInput(tx.date));
+    setEditCategoryId(tx.categoryId || "");
+    setEditFromAccountId(tx.fromAccountId || "");
+    setEditToAccountId(tx.toAccountId || "");
+    setEditDescription(tx.description || "");
+    setEditEssential(tx.essential || "NON_ESSENTIAL");
+    setEditRating(tx.rating || "NORMAL");
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editTx) return;
+    const amount = parseAmount(editAmountRaw);
+    if (!amount || amount <= 0) { toast.error("Số tiền không hợp lệ"); return; }
+    setEditSaving(true);
+    const res = await fetch(`/api/transactions/${editTx.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        type: editType,
+        amount,
+        date: editDate,
+        categoryId: editCategoryId || null,
+        fromAccountId: (editType === "EXPENSE" || editType === "TRANSFER") ? (editFromAccountId || null) : null,
+        toAccountId: (editType === "INCOME" || editType === "TRANSFER") ? (editToAccountId || null) : null,
+        description: editDescription,
+        essential: editType === "EXPENSE" ? editEssential : null,
+        rating: editType === "EXPENSE" ? editRating : null,
+      }),
+    });
+    if (res.ok) {
+      const updated = await res.json();
+      setTransactions(prev => prev.map(t => t.id === updated.id ? updated : t));
+      toast.success("Đã cập nhật giao dịch");
+      setEditTx(null);
+    } else {
+      toast.error("Cập nhật thất bại");
+    }
+    setEditSaving(false);
+  };
 
   const handleDelete = async () => {
     if (!deleteId) return;
@@ -39,6 +105,8 @@ export default function TransactionsPage() {
     }
     setDeleteId(null);
   };
+
+  const filteredCats = categories.filter(c => c.type === editType);
 
   return (
     <div className="animate-in fade-in duration-500 max-w-4xl mx-auto">
@@ -62,7 +130,7 @@ export default function TransactionsPage() {
             type="text"
             placeholder="Tìm theo ghi chú, hạng mục..."
             className="input w-full"
-            style={{ paddingLeft: '44px' }}
+            style={{ paddingLeft: "44px" }}
             value={search}
             onChange={e => setSearch(e.target.value)}
           />
@@ -124,7 +192,7 @@ export default function TransactionsPage() {
                 </div>
               </div>
 
-              {/* Amount */}
+              {/* Amount + badges */}
               <div className="text-right flex-shrink-0">
                 <div className={`font-bold text-sm ${
                   tx.type === "INCOME" ? "text-[var(--success)]" :
@@ -151,16 +219,157 @@ export default function TransactionsPage() {
                 )}
               </div>
 
-              {/* Delete */}
-              <button
-                onClick={() => setDeleteId(tx.id)}
-                className="opacity-0 group-hover:opacity-100 text-[var(--text-muted)] hover:text-[var(--danger)] p-1 transition-all"
-                title="Xoá"
-              >
-                ×
-              </button>
+              {/* Actions */}
+              <div className="opacity-0 group-hover:opacity-100 flex items-center gap-1 transition-all">
+                <button
+                  onClick={() => openEdit(tx)}
+                  className="text-[var(--text-muted)] hover:text-[var(--accent)] p-1.5 rounded-lg hover:bg-[var(--accent-muted)] transition-colors"
+                  title="Sửa"
+                >
+                  <Pencil size={14} />
+                </button>
+                <button
+                  onClick={() => setDeleteId(tx.id)}
+                  className="text-[var(--text-muted)] hover:text-[var(--danger)] p-1.5 rounded-lg hover:bg-red-50 transition-colors"
+                  title="Xoá"
+                >
+                  ×
+                </button>
+              </div>
             </div>
           ))}
+        </div>
+      )}
+
+      {/* ── Edit Modal ── */}
+      {editTx && (
+        <div className="modal-overlay" onClick={() => setEditTx(null)}>
+          <div className="modal-content max-w-lg w-full max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-5">
+              <h3 className="font-bold text-base">Sửa giao dịch</h3>
+              <button onClick={() => setEditTx(null)} className="text-[var(--text-muted)] hover:text-[var(--text-primary)]">
+                <X size={20} />
+              </button>
+            </div>
+
+            {/* Type */}
+            <div className="flex gap-2 p-1 bg-[var(--bg-input)] rounded-xl mb-4">
+              {(["EXPENSE","INCOME","TRANSFER"] as const).map(t => (
+                <button
+                  key={t}
+                  onClick={() => setEditType(t)}
+                  className={cn(
+                    "flex-1 py-2 rounded-lg text-xs font-semibold transition-all",
+                    editType === t
+                      ? t === "EXPENSE" ? "bg-white text-[var(--danger)] shadow-sm"
+                        : t === "INCOME" ? "bg-white text-[var(--success)] shadow-sm"
+                        : "bg-white text-[var(--info)] shadow-sm"
+                      : "text-[var(--text-muted)]"
+                  )}
+                >
+                  {t === "EXPENSE" ? "Chi tiêu" : t === "INCOME" ? "Thu nhập" : "Chuyển tiền"}
+                </button>
+              ))}
+            </div>
+
+            <div className="space-y-3">
+              {/* Amount */}
+              <div>
+                <label className="form-label">Số tiền</label>
+                <input
+                  className="input text-lg font-bold"
+                  value={editAmountRaw}
+                  onChange={e => setEditAmountRaw(formatAmountDisplay(parseAmount(e.target.value)))}
+                  placeholder="0"
+                  inputMode="numeric"
+                />
+              </div>
+
+              {/* Date + Category */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="form-label">Ngày</label>
+                  <input type="date" className="input" value={editDate} onChange={e => setEditDate(e.target.value)} />
+                </div>
+                {editType !== "TRANSFER" && (
+                  <div>
+                    <label className="form-label">Hạng mục</label>
+                    <select className="input" value={editCategoryId} onChange={e => setEditCategoryId(e.target.value)}>
+                      <option value="">-- Hạng mục --</option>
+                      {filteredCats.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                    </select>
+                  </div>
+                )}
+              </div>
+
+              {/* Accounts */}
+              {(editType === "EXPENSE" || editType === "TRANSFER") && (
+                <div>
+                  <label className="form-label">Từ tài khoản</label>
+                  <select className="input" value={editFromAccountId} onChange={e => setEditFromAccountId(e.target.value)}>
+                    <option value="">-- Chọn tài khoản --</option>
+                    {accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+                  </select>
+                </div>
+              )}
+              {(editType === "INCOME" || editType === "TRANSFER") && (
+                <div>
+                  <label className="form-label">Đến tài khoản</label>
+                  <select className="input" value={editToAccountId} onChange={e => setEditToAccountId(e.target.value)}>
+                    <option value="">-- Chọn tài khoản --</option>
+                    {accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+                  </select>
+                </div>
+              )}
+
+              {/* Description */}
+              <div>
+                <label className="form-label">Ghi chú</label>
+                <input className="input" value={editDescription} onChange={e => setEditDescription(e.target.value)} placeholder="Mô tả giao dịch..." />
+              </div>
+
+              {/* Essential + Rating (EXPENSE only) */}
+              {editType === "EXPENSE" && (
+                <div className="pt-2 border-t border-[var(--border)] space-y-3">
+                  <div>
+                    <label className="form-label">Tính chất</label>
+                    <div className="flex gap-2">
+                      {(["ESSENTIAL","NON_ESSENTIAL"] as const).map(v => (
+                        <button key={v} onClick={() => setEditEssential(v)}
+                          className={cn("flex-1 py-1.5 rounded-lg text-xs font-semibold border transition-all",
+                            editEssential === v
+                              ? v === "ESSENTIAL" ? "bg-blue-50 border-blue-400 text-blue-700" : "bg-[var(--bg-input)] border-[var(--text-muted)] text-[var(--text-secondary)]"
+                              : "border-[var(--border)] text-[var(--text-muted)]"
+                          )}>
+                          {v === "ESSENTIAL" ? "Thiết yếu" : "Không thiết yếu"}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div>
+                    <label className="form-label">Đánh giá</label>
+                    <div className="flex gap-2">
+                      {([["WORTHY","Xứng đáng","text-emerald-700 border-emerald-400 bg-emerald-50"],["NORMAL","Bình thường","text-[var(--info)] border-[var(--info)] bg-[var(--info-bg)]"],["WASTEFUL","Phí tiền","text-red-700 border-red-400 bg-red-50"]] as const).map(([v, label, cls]) => (
+                        <button key={v} onClick={() => setEditRating(v as any)}
+                          className={cn("flex-1 py-1.5 rounded-lg text-xs font-semibold border transition-all",
+                            editRating === v ? cls : "border-[var(--border)] text-[var(--text-muted)]"
+                          )}>
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="flex gap-3 mt-5">
+              <button onClick={() => setEditTx(null)} className="btn btn-ghost flex-1">Hủy</button>
+              <button onClick={handleSaveEdit} disabled={editSaving} className="btn btn-primary flex-1">
+                {editSaving ? "Đang lưu..." : "Lưu thay đổi"}
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
