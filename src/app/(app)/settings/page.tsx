@@ -435,8 +435,10 @@ function TelegramPanel() {
   const handleSaveAliases = async () => {
     if (!aliasModal) return;
     setAliasSaving(true);
-    // Normalise: lowercase, remove extra spaces
-    const cleaned = aliasInput.split(/[,\s]+/).filter(Boolean).map((s: string) => s.toLowerCase().trim()).join(", ");
+    // Normalise: lowercase, deduplicate, remove extra spaces
+    const cleaned = [...new Set(
+      aliasInput.split(/[,\s]+/).filter(Boolean).map((s: string) => s.toLowerCase().trim())
+    )].join(", ");
     const res = await fetch("/api/accounts", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
@@ -578,11 +580,11 @@ function TelegramPanel() {
         <p className="text-xs text-[var(--text-muted)] mb-4">
           Nhắn <code className="px-1 py-0.5 bg-[var(--bg-input)] rounded">chi 20k cafe vcb</code> → bot tự chọn đúng tài khoản.
         </p>
-        {accounts.filter(a => a.type !== "CREDIT_CARD").length === 0 ? (
+        {accounts.length === 0 ? (
           <p className="text-sm text-[var(--text-muted)]">Chưa có tài khoản nào.</p>
         ) : (
           <div className="space-y-2">
-            {accounts.filter(a => a.type !== "CREDIT_CARD").map(acc => (
+            {accounts.map(acc => (
               <div key={acc.id} className="flex items-center gap-3 p-3 rounded-xl border border-[var(--border)] hover:border-[var(--accent)] transition-colors group">
                 <div className="flex-1 min-w-0">
                   <div className="text-sm font-semibold">{acc.name}</div>

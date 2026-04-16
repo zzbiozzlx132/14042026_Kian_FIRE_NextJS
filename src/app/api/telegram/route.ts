@@ -257,7 +257,7 @@ async function saveTransaction(
     const allAccounts = await prisma.account.findMany({
       where: {
         status: "active",
-        type: { in: ["CASH", "BANK", "E_WALLET", "SAVINGS"] },
+        type: { in: ["CASH", "BANK", "E_WALLET", "SAVINGS", "CREDIT_CARD"] },
       },
     });
     targetAccount = allAccounts.find((a: any) =>
@@ -270,7 +270,7 @@ async function saveTransaction(
     targetAccount = await prisma.account.findFirst({
       where: {
         status: "active",
-        type: { in: ["CASH", "BANK", "E_WALLET", "SAVINGS"] },
+        type: { in: ["CASH", "BANK", "E_WALLET", "SAVINGS", "CREDIT_CARD"] },
       },
       orderBy: { createdAt: "asc" },
     });
@@ -660,7 +660,7 @@ export async function POST(req: Request) {
     const accounts = await prisma.account.findMany({
       where: {
         status: "active",
-        type: { in: ["CASH", "BANK", "E_WALLET", "SAVINGS"] },
+        type: { in: ["CASH", "BANK", "E_WALLET", "SAVINGS", "CREDIT_CARD"] },
       },
       orderBy: { createdAt: "asc" },
     });
