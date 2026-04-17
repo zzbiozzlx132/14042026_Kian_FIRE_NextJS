@@ -796,6 +796,8 @@ function TelegramPanel() {
   const [scheduleSaving, setScheduleSaving] = useState(false);
   const [importFile, setImportFile] = useState<File | null>(null);
   const [importing, setImporting] = useState(false);
+  const [cronExpanded, setCronExpanded] = useState(false);
+  const [cronCommands, setCronCommands] = useState<{ label: string; line: string }[]>([]);
 
   useEffect(() => {
     fetch("/api/settings/telegram")
@@ -844,8 +846,38 @@ function TelegramPanel() {
       method: "PATCH", headers: { "Content-Type": "application/json" },
       body: JSON.stringify(schedule),
     });
-    if (res.ok) toast.success("Đã lưu cài đặt báo cáo");
-    else toast.error("Lưu thất bại");
+    if (res.ok) {
+      const data = await res.json();
+      const secret = data.cronSecret || schedule.cronSecret;
+      const saved = { ...schedule, cronSecret: secret };
+      setSchedule(saved);
+      toast.success("Đã lưu cài đặt báo cáo");
+
+      const base = `${window.location.origin}/api/cron/report`;
+      const cmds: { label: string; line: string }[] = [];
+      if (saved.dailyReportTime) {
+        const [h, m] = saved.dailyReportTime.split(":");
+        cmds.push({ label: "Ngày", line: `${m} ${h} * * * curl -s "${base}?type=daily&secret=${secret}" > /dev/null` });
+      }
+      if (saved.weeklyReportDay !== "" && saved.weeklyReportDay !== null && saved.weeklyReportTime) {
+        const [h, m] = saved.weeklyReportTime.split(":");
+        cmds.push({ label: "Tuần", line: `${m} ${h} * * ${saved.weeklyReportDay} curl -s "${base}?type=weekly&secret=${secret}" > /dev/null` });
+      }
+      if (saved.monthlyReportDay && saved.monthlyReportTime) {
+        const [h, m] = saved.monthlyReportTime.split(":");
+        cmds.push({ label: "Tháng", line: `${m} ${h} ${saved.monthlyReportDay} * * curl -s "${base}?type=monthly&secret=${secret}" > /dev/null` });
+      }
+      if (saved.quarterlyReport) {
+        cmds.push({ label: "Quý", line: `0 8 1 1,4,7,10 * curl -s "${base}?type=quarterly&secret=${secret}" > /dev/null` });
+      }
+      if (saved.yearlyReport) {
+        cmds.push({ label: "Năm", line: `0 8 31 12 * curl -s "${base}?type=yearly&secret=${secret}" > /dev/null` });
+      }
+      setCronCommands(cmds);
+      if (cmds.length > 0) setCronExpanded(true);
+    } else {
+      toast.error("Lưu thất bại");
+    }
     setScheduleSaving(false);
   };
 
@@ -868,7 +900,6 @@ function TelegramPanel() {
   if (loading) return <div className="card p-8"><div className="skeleton h-40 w-full"></div></div>;
 
   const weekDays = ["Chủ nhật", "Thứ 2", "Thứ 3", "Thứ 4", "Thứ 5", "Thứ 6", "Thứ 7"];
-  const cronBase = typeof window !== "undefined" ? `${window.location.origin}/api/cron/report` : "/api/cron/report";
 
   return (
     <div className="space-y-6">
@@ -919,33 +950,35 @@ function TelegramPanel() {
       {/* Scheduled Reports */}
       {connected && (
         <div className="card p-6">
-          <div className="flex items-center gap-2 mb-4">
+          <div className="flex items-center gap-2 mb-1">
             <Clock size={16} className="text-[var(--accent)]" />
-            <h3 className="section-label mb-0">Báo cáo tự động</h3>
+            <h3 className="section-label mb-0">Báo cáo tự động qua Telegram</h3>
           </div>
           <p className="text-xs text-[var(--text-muted)] mb-5">
-            Cài đặt VPS cron job gọi các endpoint bên dưới theo lịch. Báo cáo sẽ gửi đến tất cả thành viên đã kết nối Telegram.
+            Chọn thời điểm gửi báo cáo. Bot sẽ tự động tổng kết và so sánh với kỳ trước.
           </p>
 
-          <div className="space-y-4">
+          <div className="space-y-3">
             {/* Daily */}
-            <div className="flex items-center gap-3 p-3 rounded-xl border border-[var(--border)]">
-              <Calendar size={16} className="text-orange-500 flex-shrink-0" />
+            <div className="flex items-center gap-4 p-3 rounded-xl border border-[var(--border)] bg-[var(--bg-input)]">
               <div className="flex-1">
-                <div className="text-sm font-semibold mb-1">Báo cáo ngày</div>
-                <code className="text-[11px] text-[var(--text-muted)] break-all">{cronBase}?type=daily&secret=***</code>
+                <div className="text-sm font-semibold">📅 Báo cáo ngày</div>
+                <div className="text-xs text-[var(--text-muted)]">Chi tiêu hôm nay vs hôm qua</div>
               </div>
-              <input type="time" className="input w-28 text-sm" value={schedule.dailyReportTime} onChange={e => setSchedule({...schedule, dailyReportTime: e.target.value})} />
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-[var(--text-muted)]">Gửi lúc</span>
+                <input type="time" className="input w-28 text-sm" value={schedule.dailyReportTime} onChange={e => setSchedule({...schedule, dailyReportTime: e.target.value})} />
+              </div>
             </div>
 
             {/* Weekly */}
-            <div className="flex items-center gap-3 p-3 rounded-xl border border-[var(--border)]">
-              <Calendar size={16} className="text-blue-500 flex-shrink-0" />
+            <div className="flex items-center gap-4 p-3 rounded-xl border border-[var(--border)] bg-[var(--bg-input)]">
               <div className="flex-1">
-                <div className="text-sm font-semibold mb-1">Báo cáo tuần</div>
-                <code className="text-[11px] text-[var(--text-muted)] break-all">{cronBase}?type=weekly&secret=***</code>
+                <div className="text-sm font-semibold">📆 Báo cáo tuần</div>
+                <div className="text-xs text-[var(--text-muted)]">Tuần này vs tuần trước</div>
               </div>
-              <div className="flex gap-2">
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-[var(--text-muted)]">Vào</span>
                 <select className="input w-28 text-sm" value={schedule.weeklyReportDay ?? ""} onChange={e => setSchedule({...schedule, weeklyReportDay: e.target.value})}>
                   <option value="">— Ngày —</option>
                   {weekDays.map((d, i) => <option key={i} value={i}>{d}</option>)}
@@ -955,42 +988,68 @@ function TelegramPanel() {
             </div>
 
             {/* Monthly */}
-            <div className="flex items-center gap-3 p-3 rounded-xl border border-[var(--border)]">
-              <Calendar size={16} className="text-purple-500 flex-shrink-0" />
+            <div className="flex items-center gap-4 p-3 rounded-xl border border-[var(--border)] bg-[var(--bg-input)]">
               <div className="flex-1">
-                <div className="text-sm font-semibold mb-1">Báo cáo tháng</div>
-                <code className="text-[11px] text-[var(--text-muted)] break-all">{cronBase}?type=monthly&secret=***</code>
+                <div className="text-sm font-semibold">🗓 Báo cáo tháng</div>
+                <div className="text-xs text-[var(--text-muted)]">Tháng này vs tháng trước</div>
               </div>
-              <div className="flex gap-2">
-                <input type="number" min="1" max="31" className="input w-20 text-sm" placeholder="Ngày" value={schedule.monthlyReportDay ?? ""} onChange={e => setSchedule({...schedule, monthlyReportDay: e.target.value})} />
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-[var(--text-muted)]">Ngày</span>
+                <input type="number" min="1" max="31" className="input w-16 text-sm text-center" placeholder="28" value={schedule.monthlyReportDay ?? ""} onChange={e => setSchedule({...schedule, monthlyReportDay: e.target.value})} />
                 <input type="time" className="input w-28 text-sm" value={schedule.monthlyReportTime} onChange={e => setSchedule({...schedule, monthlyReportTime: e.target.value})} />
               </div>
             </div>
 
-            {/* Quarterly & Yearly toggles */}
-            <div className="flex gap-4">
-              <label className="flex items-center gap-2 cursor-pointer p-3 rounded-xl border border-[var(--border)] flex-1">
-                <input type="checkbox" checked={schedule.quarterlyReport} onChange={e => setSchedule({...schedule, quarterlyReport: e.target.checked})} className="w-4 h-4 accent-[var(--accent)]" />
-                <span className="text-sm font-medium">Báo cáo quý</span>
-                <span className="text-xs text-[var(--text-muted)]">(cuối mỗi quý)</span>
+            {/* Quarterly & Yearly */}
+            <div className="grid grid-cols-2 gap-3">
+              <label className="flex items-start gap-3 cursor-pointer p-3 rounded-xl border border-[var(--border)] bg-[var(--bg-input)] hover:border-[var(--accent)] transition-colors">
+                <input type="checkbox" checked={schedule.quarterlyReport} onChange={e => setSchedule({...schedule, quarterlyReport: e.target.checked})} className="mt-0.5 w-4 h-4 accent-[var(--accent)]" />
+                <div>
+                  <div className="text-sm font-semibold">📊 Báo cáo quý</div>
+                  <div className="text-xs text-[var(--text-muted)]">Cuối mỗi quý</div>
+                </div>
               </label>
-              <label className="flex items-center gap-2 cursor-pointer p-3 rounded-xl border border-[var(--border)] flex-1">
-                <input type="checkbox" checked={schedule.yearlyReport} onChange={e => setSchedule({...schedule, yearlyReport: e.target.checked})} className="w-4 h-4 accent-[var(--accent)]" />
-                <span className="text-sm font-medium">Báo cáo năm</span>
-                <span className="text-xs text-[var(--text-muted)]">(31/12 hàng năm)</span>
+              <label className="flex items-start gap-3 cursor-pointer p-3 rounded-xl border border-[var(--border)] bg-[var(--bg-input)] hover:border-[var(--accent)] transition-colors">
+                <input type="checkbox" checked={schedule.yearlyReport} onChange={e => setSchedule({...schedule, yearlyReport: e.target.checked})} className="mt-0.5 w-4 h-4 accent-[var(--accent)]" />
+                <div>
+                  <div className="text-sm font-semibold">🏆 Báo cáo năm</div>
+                  <div className="text-xs text-[var(--text-muted)]">31/12 hàng năm</div>
+                </div>
               </label>
-            </div>
-
-            {/* Cron Secret */}
-            <div>
-              <label className="form-label">Cron Secret (bảo vệ endpoint)</label>
-              <input type="text" className="input font-mono" placeholder="Tự đặt chuỗi bí mật bất kỳ" value={schedule.cronSecret} onChange={e => setSchedule({...schedule, cronSecret: e.target.value})} />
-              <p className="text-xs text-[var(--text-muted)] mt-1">Thêm <code>?secret=YOUR_SECRET</code> vào URL cron job trên VPS.</p>
             </div>
 
             <button onClick={handleSaveSchedule} disabled={scheduleSaving} className="btn btn-primary w-full">
               {scheduleSaving ? "Đang lưu..." : "Lưu cài đặt báo cáo"}
             </button>
+
+            {/* Cron commands — shown after save, collapsible */}
+            {cronCommands.length > 0 && (
+              <div className="border border-[var(--border)] rounded-xl overflow-hidden">
+                <button
+                  onClick={() => setCronExpanded(!cronExpanded)}
+                  className="w-full flex items-center justify-between px-4 py-3 text-sm font-medium text-[var(--text-secondary)] hover:bg-[var(--bg-input)] transition-colors"
+                >
+                  <span>🛠 Lệnh cài đặt VPS cron <span className="text-xs font-normal text-[var(--text-muted)]">(dán vào terminal VPS)</span></span>
+                  <span className="text-[var(--text-muted)]">{cronExpanded ? "▲" : "▼"}</span>
+                </button>
+                {cronExpanded && (
+                  <div className="px-4 pb-4 space-y-2 bg-[var(--bg-input)]">
+                    <p className="text-xs text-[var(--text-muted)] mb-3">Chạy lệnh <code className="px-1 bg-[var(--bg-card)] rounded">crontab -e</code> trên VPS rồi dán từng dòng vào:</p>
+                    {cronCommands.map((cmd, i) => (
+                      <div key={i} className="flex items-start gap-2 p-3 rounded-lg bg-[var(--bg-card)] border border-[var(--border)]">
+                        <code className="text-[11px] text-[var(--text-secondary)] flex-1 break-all leading-relaxed">{cmd.line}</code>
+                        <button
+                          onClick={() => { navigator.clipboard.writeText(cmd.line); toast.success(`Đã copy lệnh ${cmd.label}`); }}
+                          className="flex-shrink-0 px-2 py-1 rounded text-xs bg-[var(--accent-muted)] text-[var(--accent)] hover:opacity-80 transition-opacity"
+                        >
+                          Copy
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </div>
       )}

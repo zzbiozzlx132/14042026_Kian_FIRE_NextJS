@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/lib/auth";
+import crypto from "crypto";
 
 /**
  * GET /api/settings/telegram — get connection status
@@ -103,7 +104,10 @@ export async function PATCH(req: Request) {
 
   try {
     const body = await req.json();
-    const { dailyReportTime, weeklyReportDay, weeklyReportTime, monthlyReportDay, monthlyReportTime, quarterlyReport, yearlyReport, cronSecret } = body;
+    const { dailyReportTime, weeklyReportDay, weeklyReportTime, monthlyReportDay, monthlyReportTime, quarterlyReport, yearlyReport } = body;
+
+    const existing = await prisma.lifePlanSettings.findFirst();
+    const finalSecret = existing?.cronSecret || crypto.randomBytes(16).toString("hex");
 
     await prisma.lifePlanSettings.upsert({
       where: { id: "default" },
@@ -115,12 +119,12 @@ export async function PATCH(req: Request) {
         ...(monthlyReportTime !== undefined ? { monthlyReportTime: monthlyReportTime || null } : {}),
         ...(quarterlyReport !== undefined ? { quarterlyReport } : {}),
         ...(yearlyReport !== undefined ? { yearlyReport } : {}),
-        ...(cronSecret !== undefined ? { cronSecret: cronSecret || null } : {}),
+        cronSecret: finalSecret,
       },
-      create: { id: "default" },
+      create: { id: "default", cronSecret: finalSecret },
     });
 
-    return NextResponse.json({ ok: true });
+    return NextResponse.json({ ok: true, cronSecret: finalSecret });
   } catch (e: any) {
     return NextResponse.json({ error: e?.message || "Lỗi lưu cài đặt" }, { status: 500 });
   }
