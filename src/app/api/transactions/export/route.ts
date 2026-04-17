@@ -37,6 +37,9 @@ export async function GET() {
   headerRow.alignment = { vertical: "middle", horizontal: "center" };
   headerRow.height = 22;
 
+  // Prevent Excel formula injection by prefixing dangerous chars
+  const safe = (v: string) => /^[=+\-@|]/.test(v) ? `'${v}` : v;
+
   const typeMap: Record<string, string> = { EXPENSE: "Chi tiêu", INCOME: "Thu nhập", TRANSFER: "Chuyển khoản" };
   const essentialMap: Record<string, string> = { ESSENTIAL: "Thiết yếu", NON_ESSENTIAL: "Không thiết yếu" };
   const ratingMap: Record<string, string> = { WORTHY: "Xứng đáng", NORMAL: "Bình thường", WASTEFUL: "Phí tiền" };
@@ -46,10 +49,10 @@ export async function GET() {
       date: new Date(tx.date).toLocaleDateString("vi-VN"),
       type: typeMap[tx.type] || tx.type,
       amount: tx.amount,
-      category: tx.category?.name || "",
-      fromAccount: tx.fromAccount?.name || "",
-      toAccount: tx.toAccount?.name || "",
-      description: tx.description || "",
+      category: safe(tx.category?.name || ""),
+      fromAccount: safe(tx.fromAccount?.name || ""),
+      toAccount: safe(tx.toAccount?.name || ""),
+      description: safe(tx.description || ""),
       essential: tx.essential ? (essentialMap[tx.essential] || tx.essential) : "",
       rating: tx.rating ? (ratingMap[tx.rating] || tx.rating) : "",
     });

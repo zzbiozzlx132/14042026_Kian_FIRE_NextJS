@@ -527,9 +527,18 @@ function buildConfirmButtons(
 
 export async function POST(req: Request) {
   try {
-    const body = await req.json();
     const token = await getBotToken();
     if (!token) return NextResponse.json({ ok: true });
+
+    // Verify request is from Telegram using X-Telegram-Bot-Api-Secret-Token header
+    const { createHmac } = await import("crypto");
+    const expectedSecret = createHmac("sha256", "kian-fire-webhook").update(token).digest("hex").slice(0, 32);
+    const incomingSecret = req.headers.get("x-telegram-bot-api-secret-token");
+    if (incomingSecret !== expectedSecret) {
+      return NextResponse.json({ ok: false }, { status: 403 });
+    }
+
+    const body = await req.json();
 
     // ── Handle callback query ──────────────────────────────
     if (body.callback_query) {

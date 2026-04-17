@@ -120,8 +120,8 @@ export async function GET(req: Request) {
   const settings = await prisma.lifePlanSettings.findUnique({ where: { id: "default" } });
   if (!settings?.telegramBotToken) return NextResponse.json({ error: "Bot chưa được kết nối" }, { status: 400 });
 
-  // Verify secret if configured
-  if (settings.cronSecret && settings.cronSecret !== secret) {
+  // Secret is always required
+  if (!secret || !settings.cronSecret || settings.cronSecret !== secret) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 

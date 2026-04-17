@@ -31,6 +31,19 @@ export async function GET() {
     } catch {}
   }
 
+  // Silently re-register webhook with secret_token if connected (idempotent)
+  if (connected) {
+    try {
+      const { createHmac } = await import("crypto");
+      const webhookSecret = createHmac("sha256", "kian-fire-webhook").update(token).digest("hex").slice(0, 32);
+      fetch(`https://api.telegram.org/bot${token}/setWebhook`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url: "https://fire.kiantr.com/api/telegram", secret_token: webhookSecret }),
+      }).catch(() => {});
+    } catch {}
+  }
+
   return NextResponse.json({
     connected,
     botInfo,
@@ -75,12 +88,14 @@ export async function POST(req: Request) {
       create: { id: "default", telegramBotToken: token },
     });
 
-    // Register webhook
+    // Register webhook with secret_token so we can verify incoming requests
+    const { createHmac } = await import("crypto");
+    const webhookSecret = createHmac("sha256", "kian-fire-webhook").update(token).digest("hex").slice(0, 32);
     const webhookUrl = `https://fire.kiantr.com/api/telegram`;
     const webhookRes = await fetch(`https://api.telegram.org/bot${token}/setWebhook`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ url: webhookUrl }),
+      body: JSON.stringify({ url: webhookUrl, secret_token: webhookSecret }),
     });
     const webhookData = await webhookRes.json();
 

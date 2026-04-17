@@ -8,10 +8,17 @@ export async function DELETE(req: Request, context: { params: Promise<{ id: stri
 
   try {
     const { id } = await context.params;
-    await prisma.transaction.delete({
-      where: { id }
-    });
+    const sessionUser = session.user as any;
 
+    const tx = await prisma.transaction.findUnique({ where: { id }, select: { createdById: true } });
+    if (!tx) return NextResponse.json({ error: "Không tìm thấy giao dịch" }, { status: 404 });
+
+    // Only admin or the creator can delete
+    if (sessionUser.role !== "ADMIN" && tx.createdById !== sessionUser.id) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+
+    await prisma.transaction.delete({ where: { id } });
     return NextResponse.json({ success: true }, { status: 200 });
   } catch (error) {
     console.error("Delete Tx Error:", error);
@@ -25,6 +32,15 @@ export async function PATCH(req: Request, context: { params: Promise<{ id: strin
 
   try {
     const { id } = await context.params;
+    const sessionUser = session.user as any;
+
+    const tx = await prisma.transaction.findUnique({ where: { id }, select: { createdById: true } });
+    if (!tx) return NextResponse.json({ error: "Không tìm thấy giao dịch" }, { status: 404 });
+
+    if (sessionUser.role !== "ADMIN" && tx.createdById !== sessionUser.id) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+
     const body = await req.json();
     const updateData: any = {};
 
@@ -38,18 +54,17 @@ export async function PATCH(req: Request, context: { params: Promise<{ id: strin
     if (body.essential !== undefined) updateData.essential = body.essential;
     if (body.rating !== undefined) updateData.rating = body.rating;
 
-    // Clear essential/rating when changing to non-EXPENSE
     if (body.type && body.type !== "EXPENSE") {
       updateData.essential = null;
       updateData.rating = null;
     }
 
-    const tx = await prisma.transaction.update({
+    const updated = await prisma.transaction.update({
       where: { id },
       data: updateData,
       include: { category: true, fromAccount: true, toAccount: true },
     });
-    return NextResponse.json(tx);
+    return NextResponse.json(updated);
   } catch (error) {
     return NextResponse.json({ error: "Cập nhật thất bại" }, { status: 400 });
   }
