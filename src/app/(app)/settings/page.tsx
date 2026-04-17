@@ -472,30 +472,40 @@ function CategoriesPanel() {
         </p>
 
         {/* Add keyword form */}
-        <div className="flex gap-2 mb-4">
-          <input
-            className="input flex-1"
-            placeholder="Từ khoá (VD: bánh mì, nhậu, xăng...)"
-            value={kwForm.keyword}
-            onChange={e => setKwForm({...kwForm, keyword: e.target.value})}
-            onKeyDown={e => e.key === "Enter" && handleAddKeyword()}
-          />
-          <select
-            className="input w-44"
-            value={kwForm.categoryId}
-            onChange={e => setKwForm({...kwForm, categoryId: e.target.value})}
-          >
-            <option value="">— Hạng mục —</option>
-            <optgroup label="Chi tiêu">
-              {expenses.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-            </optgroup>
-            <optgroup label="Thu nhập">
-              {incomes.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-            </optgroup>
-          </select>
-          <button onClick={handleAddKeyword} disabled={kwLoading} className="btn btn-primary px-4">
-            <Plus size={16} />
-          </button>
+        <div className="p-4 rounded-xl border border-dashed border-[var(--border)] bg-[var(--bg-input)] mb-4 space-y-3">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div>
+              <label className="form-label">Từ khoá</label>
+              <input
+                className="input"
+                placeholder="VD: bánh mì, nhậu, xăng..."
+                value={kwForm.keyword}
+                onChange={e => setKwForm({...kwForm, keyword: e.target.value})}
+                onKeyDown={e => e.key === "Enter" && handleAddKeyword()}
+              />
+            </div>
+            <div>
+              <label className="form-label">Hạng mục tương ứng</label>
+              <select
+                className="input"
+                value={kwForm.categoryId}
+                onChange={e => setKwForm({...kwForm, categoryId: e.target.value})}
+              >
+                <option value="">— Chọn hạng mục —</option>
+                <optgroup label="Chi tiêu">
+                  {expenses.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                </optgroup>
+                <optgroup label="Thu nhập">
+                  {incomes.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                </optgroup>
+              </select>
+            </div>
+          </div>
+          <div className="flex justify-end">
+            <button onClick={handleAddKeyword} disabled={kwLoading || !kwForm.keyword.trim() || !kwForm.categoryId} className="btn btn-primary text-sm py-2 px-5">
+              <Plus size={15} /> Thêm từ khoá
+            </button>
+          </div>
         </div>
 
         {keywords.length === 0 ? (
