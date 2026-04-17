@@ -284,7 +284,21 @@ async function saveTransaction(
     });
   }
 
-  const category = await prisma.category.findFirst({
+  // Block negative balance for non-credit-card accounts
+  if (type === "EXPENSE" && targetAccount && targetAccount.type !== "CREDIT_CARD") {
+    const incoming = await prisma.transaction.aggregate({ _sum: { amount: true }, where: { toAccountId: targetAccount.id } });
+    const outgoing = await prisma.transaction.aggregate({ _sum: { amount: true }, where: { fromAccountId: targetAccount.id } });
+    const balance = targetAccount.initialBalance + (incoming._sum.amount || 0) - (outgoing._sum.amount || 0);
+    if (amount > balance) {
+      throw new Error(`Số dư ${targetAccount.name} không đủ. Hiện có: ${Math.round(balance).toLocaleString("vi-VN")}đ`);
+    }
+  }
+
+  // Find category: keyword match first, then name match
+  const descLower = description.toLowerCase();
+  const allKeywords = await prisma.categoryKeyword.findMany({ include: { category: true } });
+  const keywordMatch = allKeywords.find(k => descLower.includes(k.keyword.toLowerCase()) && k.category.type === type && k.category.status === "active");
+  const category = keywordMatch?.category || await prisma.category.findFirst({
     where: { type, status: "active", name: { contains: description, mode: "insensitive" } },
   });
   const adminUser = await prisma.user.findFirst({
@@ -613,9 +627,10 @@ export async function POST(req: Request) {
               `\n\n✅ <b>Đã lưu thành công!</b>`
             );
           }
-        } catch {
-          await answerCallback(token, callbackId, "Lỗi lưu");
-          await editMessage(token, chatId, messageId, "❌ Lỗi khi lưu. Thử lại.");
+        } catch (err: any) {
+          const msg = err?.message || "Lỗi khi lưu";
+          await answerCallback(token, callbackId, msg.slice(0, 200));
+          await editMessage(token, chatId, messageId, `❌ ${msg}`);
         }
         return NextResponse.json({ ok: true });
       }
@@ -708,6 +723,53 @@ export async function POST(req: Request) {
     }
     if (text === "/today" || text === "/homnay") {
       await handleToday(token, chatId);
+      return NextResponse.json({ ok: true });
+    }
+
+    // ── /pair CODE ─────────────────────────────────────────
+    if (text.toLowerCase().startsWith("/pair")) {
+      const code = text.split(/\s+/)[1]?.toUpperCase();
+      if (!code) {
+        await send(token, chatId, "❌ Vui lòng nhập mã xác nhận.\nVí dụ: <code>/pair ABC123</code>");
+        return NextResponse.json({ ok: true });
+      }
+      const user = await prisma.user.findFirst({ where: { telegramPairingCode: code } });
+      if (!user) {
+        await send(token, chatId, "❌ Mã không hợp lệ hoặc đã hết hạn.\nVui lòng tạo mã mới trên web.");
+        return NextResponse.json({ ok: true });
+      }
+      if (user.telegramPaired) {
+        await send(token, chatId, "✅ Tài khoản này đã được kết nối rồi!");
+        return NextResponse.json({ ok: true });
+      }
+      // Save chatId, wait for admin approval
+      await prisma.user.update({
+        where: { id: user.id },
+        data: { telegramChatId: String(chatId) },
+      });
+      await send(token, chatId, `⏳ Đã nhận yêu cầu kết nối cho tài khoản <b>${user.name}</b>.\n\nAdmin đang xem xét — bạn sẽ nhận thông báo khi được duyệt.`);
+
+      // Notify all admins
+      const admins = await prisma.user.findMany({ where: { role: "ADMIN", telegramChatId: { not: null }, telegramPaired: true } });
+      for (const admin of admins) {
+        await send(token, Number(admin.telegramChatId),
+          `🔔 <b>Yêu cầu kết nối Telegram</b>\n\n👤 ${user.name} (${user.email})\n\nVào Cài đặt → Thành viên để duyệt.`
+        );
+      }
+      return NextResponse.json({ ok: true });
+    }
+
+    // Check if user is paired (for non-admin commands)
+    const senderChatId = String(chatId);
+    const pairedUser = await prisma.user.findFirst({
+      where: { telegramChatId: senderChatId, telegramPaired: true },
+    });
+    // Allow admin user (the one who set up the bot) to always use it
+    const adminUser = await prisma.user.findFirst({ where: { role: "ADMIN" }, orderBy: { createdAt: "asc" } });
+    const isAuthorized = pairedUser || (adminUser?.telegramChatId === null);
+
+    if (!isAuthorized) {
+      await send(token, chatId, "❌ Tài khoản của bạn chưa được kết nối.\n\nVào web → Cài đặt → Telegram để lấy mã kết nối, rồi gõ <code>/pair MÃ</code> ở đây.");
       return NextResponse.json({ ok: true });
     }
 

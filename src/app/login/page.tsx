@@ -7,7 +7,7 @@ import { Eye, EyeOff, ArrowRight } from "lucide-react";
 
 export default function LoginPage() {
   const router = useRouter();
-  const [email, setEmail] = useState("");
+  const [login, setLogin] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
@@ -17,7 +17,7 @@ export default function LoginPage() {
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!email || !password) {
+    if (!login || !password) {
       setError("Vui lòng nhập đầy đủ");
       return;
     }
@@ -25,13 +25,13 @@ export default function LoginPage() {
     setError("");
 
     const result = await signIn("credentials", {
-      email,
+      login,
       password,
       redirect: false,
     });
 
     if (result?.error) {
-      setError("Email hoặc mật khẩu không đúng");
+      setError("Thông tin đăng nhập không đúng");
       setLoading(false);
     } else {
       router.push("/dashboard");
@@ -41,7 +41,7 @@ export default function LoginPage() {
 
   const handleResetPassword = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!email) {
+    if (!login) {
       setError("Vui lòng nhập email");
       return;
     }
@@ -53,7 +53,7 @@ export default function LoginPage() {
       const res = await fetch("/api/auth/reset-password", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email }),
+        body: JSON.stringify({ email: login }),
       });
       const data = await res.json();
       if (data.success) {
@@ -92,11 +92,11 @@ export default function LoginPage() {
               <div className="form-group">
                 <label className="form-label">Email đã đăng ký</label>
                 <input
-                  type="email"
+                  type="text"
                   className="input"
                   placeholder="kian@example.com"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
+                  value={login}
+                  onChange={(e) => setLogin(e.target.value)}
                   autoComplete="email"
                   autoFocus
                 />
@@ -134,14 +134,14 @@ export default function LoginPage() {
           ) : (
             <form onSubmit={handleLogin} className="login-form">
               <div className="form-group">
-                <label className="form-label">Email</label>
+                <label className="form-label">Email / Tên đăng nhập / SĐT</label>
                 <input
-                  type="email"
+                  type="text"
                   className="input"
-                  placeholder="kian@example.com"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  autoComplete="email"
+                  placeholder="Email, username hoặc số điện thoại"
+                  value={login}
+                  onChange={(e) => setLogin(e.target.value)}
+                  autoComplete="username"
                   autoFocus
                 />
               </div>

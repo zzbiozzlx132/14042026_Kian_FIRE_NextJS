@@ -79,9 +79,6 @@ export default function NewTransactionPage() {
           amount,
           date,
           categoryId,
-          // EXPENSE: fromAccountId = nguồn tiền
-          // INCOME: toAccountId = tài khoản nhận
-          // TRANSFER: cả hai
           fromAccountId: (type === "EXPENSE" || type === "TRANSFER") ? (fromAccountId || undefined) : undefined,
           toAccountId: (type === "INCOME" || type === "TRANSFER") ? (toAccountId || undefined) : undefined,
           description,
@@ -90,13 +87,18 @@ export default function NewTransactionPage() {
         }),
       });
 
-      if (!res.ok) throw new Error("API failed");
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        toast.error(data.error || "Lỗi khi lưu giao dịch. Vui lòng thử lại.");
+        setLoading(false);
+        return;
+      }
 
       toast.success("Đã lưu giao dịch");
       router.push("/transactions");
       router.refresh();
     } catch (error) {
-      toast.error("Lỗi khi lưu giao dịch. Vui lòng thử lại.");
+      toast.error("Lỗi kết nối. Vui lòng thử lại.");
       setLoading(false);
     }
   };

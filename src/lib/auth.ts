@@ -7,20 +7,29 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
   providers: [
     Credentials({
       credentials: {
-        email: { label: "Email", type: "email" },
+        login: { label: "Email / Tên đăng nhập / SĐT", type: "text" },
         password: { label: "Password", type: "password" },
       },
       async authorize(credentials) {
-        if (!credentials?.email || !credentials?.password) return null;
+        const login = (credentials?.login as string || "").trim();
+        const password = credentials?.password as string;
+        if (!login || !password) return null;
 
         // [MOCK AUTH] Cho phép đăng nhập không cần DB trên local
-        if (process.env.NODE_ENV === "development" && credentials.email === "kian@example.com") {
+        if (process.env.NODE_ENV === "development" && login === "kian@example.com") {
           return { id: "1", name: "Kian (Dev)", email: "kian@example.com", role: "ADMIN" };
         }
 
         try {
-          const user = await prisma.user.findUnique({
-            where: { email: credentials.email as string },
+          // Find by email, username, or phone
+          const user = await prisma.user.findFirst({
+            where: {
+              OR: [
+                { email: login },
+                { username: login },
+                { phone: login },
+              ],
+            },
           });
 
           if (!user) return null;
@@ -41,7 +50,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         } catch (error) {
           console.error("Auth DB Error:", error);
           if (process.env.NODE_ENV === "development") {
-            return { id: "1", name: "Kian (Dev DB Fallback)", email: credentials.email as string, role: "ADMIN" };
+            return { id: "1", name: "Kian (Dev DB Fallback)", email: login, role: "ADMIN" };
           }
           return null;
         }

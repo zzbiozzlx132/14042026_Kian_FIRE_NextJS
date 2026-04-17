@@ -34,6 +34,16 @@ export async function GET() {
     connected,
     botInfo,
     tokenMasked: token ? `${token.slice(0, 8)}...${token.slice(-4)}` : "",
+    schedule: {
+      dailyReportTime: settings?.dailyReportTime || "",
+      weeklyReportDay: settings?.weeklyReportDay ?? null,
+      weeklyReportTime: settings?.weeklyReportTime || "",
+      monthlyReportDay: settings?.monthlyReportDay ?? null,
+      monthlyReportTime: settings?.monthlyReportTime || "",
+      quarterlyReport: settings?.quarterlyReport || false,
+      yearlyReport: settings?.yearlyReport || false,
+      cronSecret: settings?.cronSecret || "",
+    },
   });
 }
 
@@ -84,6 +94,35 @@ export async function POST(req: Request) {
     });
   } catch (error: any) {
     return NextResponse.json({ error: error?.message || "Lỗi kết nối" }, { status: 500 });
+  }
+}
+
+export async function PATCH(req: Request) {
+  const session = await auth();
+  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  try {
+    const body = await req.json();
+    const { dailyReportTime, weeklyReportDay, weeklyReportTime, monthlyReportDay, monthlyReportTime, quarterlyReport, yearlyReport, cronSecret } = body;
+
+    await prisma.lifePlanSettings.upsert({
+      where: { id: "default" },
+      update: {
+        ...(dailyReportTime !== undefined ? { dailyReportTime: dailyReportTime || null } : {}),
+        ...(weeklyReportDay !== undefined ? { weeklyReportDay: weeklyReportDay !== null && weeklyReportDay !== "" ? Number(weeklyReportDay) : null } : {}),
+        ...(weeklyReportTime !== undefined ? { weeklyReportTime: weeklyReportTime || null } : {}),
+        ...(monthlyReportDay !== undefined ? { monthlyReportDay: monthlyReportDay !== null && monthlyReportDay !== "" ? Number(monthlyReportDay) : null } : {}),
+        ...(monthlyReportTime !== undefined ? { monthlyReportTime: monthlyReportTime || null } : {}),
+        ...(quarterlyReport !== undefined ? { quarterlyReport } : {}),
+        ...(yearlyReport !== undefined ? { yearlyReport } : {}),
+        ...(cronSecret !== undefined ? { cronSecret: cronSecret || null } : {}),
+      },
+      create: { id: "default" },
+    });
+
+    return NextResponse.json({ ok: true });
+  } catch (e: any) {
+    return NextResponse.json({ error: e?.message || "Lỗi lưu cài đặt" }, { status: 500 });
   }
 }
 

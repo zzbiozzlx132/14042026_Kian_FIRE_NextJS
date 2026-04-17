@@ -14,10 +14,17 @@ model User {
   id        String   @id @default(cuid())
   name      String
   email     String   @unique
+  username  String?  @unique
+  phone     String?
   password  String
   role      UserRole @default(USER)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  // Telegram pairing
+  telegramChatId       String?
+  telegramPairingCode  String?
+  telegramPaired       Boolean @default(false)
 
   transactions Transaction[]
   logs         ActivityLog[]
@@ -81,6 +88,18 @@ model Category {
 
   transactions Transaction[]
   recurringTx  RecurringTransaction[]
+  keywords     CategoryKeyword[]
+}
+
+model CategoryKeyword {
+  id         String   @id @default(cuid())
+  keyword    String
+  categoryId String
+  category   Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  createdAt  DateTime @default(now())
+
+  @@unique([keyword])
+  @@index([categoryId])
 }
 
 // ═══════════════════════════════════════
@@ -293,6 +312,16 @@ model LifePlanSettings {
   swrPct               Float   @default(4)
   plannedMonthlyInvest Float   @default(0)
   telegramBotToken     String?
+
+  // Telegram scheduled reports
+  dailyReportTime    String?  // "22:00"
+  weeklyReportDay    Int?     // 0=Sun … 6=Sat
+  weeklyReportTime   String?  // "20:00"
+  monthlyReportDay   Int?     // 1–31
+  monthlyReportTime  String?  // "20:00"
+  quarterlyReport    Boolean  @default(false)
+  yearlyReport       Boolean  @default(false)
+  cronSecret         String?  // secret key for /api/cron/* endpoints
 }
 
 // ═══════════════════════════════════════
