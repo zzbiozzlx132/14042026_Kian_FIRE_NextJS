@@ -169,6 +169,14 @@ async function answerCallback(
   });
 }
 
+async function clearKeyboard(token: string, chatId: number, messageId: number) {
+  await fetch(`https://api.telegram.org/bot${token}/editMessageReplyMarkup`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ chat_id: chatId, message_id: messageId, reply_markup: { inline_keyboard: [] } }),
+  });
+}
+
 async function editMessage(
   token: string,
   chatId: number,
@@ -536,9 +544,7 @@ export async function POST(req: Request) {
             }
             const labels: Record<string, string> = { E: "Thiết yếu", N: "Không thiết yếu", W: "Xứng đáng", B: "Bình thường", P: "Phí tiền" };
             await answerCallback(token, callbackId, `Đã đánh dấu: ${labels[code] || code}`);
-            const originalText = cb.message?.text || "";
-            const newText = originalText.replace(/\n\n✅ <b>Đã lưu!<\/b> Phân loại giao dịch:/, `\n\n✅ <b>Đã lưu!</b> · ${labels[code] || code}`);
-            await editMessage(token, chatId, messageId, newText);
+            await clearKeyboard(token, chatId, messageId);
           } catch {
             await answerCallback(token, callbackId, "Lỗi cập nhật");
           }
@@ -568,6 +574,10 @@ export async function POST(req: Request) {
           const descMatch = msgText.match(/📝 (.+?)(?:\n|$)/);
           const fullDesc = descMatch ? descMatch[1].trim() : decoded.description;
 
+          // Answer and remove keyboard immediately to prevent double-tap duplicates
+          await answerCallback(token, callbackId, "Đang lưu...");
+          await clearKeyboard(token, chatId, messageId);
+
           const result = await saveTransaction(
             decoded.type,
             decoded.amount,
@@ -575,7 +585,6 @@ export async function POST(req: Request) {
             decoded.accountIdShort
           );
           const txId12 = result.txId.slice(0, 12);
-          await answerCallback(token, callbackId, "Đã lưu!");
 
           // EXPENSE: show essential classification (1 row only — rating edit on web)
           if (decoded.type === "EXPENSE") {
