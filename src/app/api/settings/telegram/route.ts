@@ -65,6 +65,7 @@ export async function GET() {
 export async function POST(req: Request) {
   const session = await auth();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if ((session.user as any).role !== "ADMIN") return NextResponse.json({ error: "Chỉ Admin được cấu hình bot" }, { status: 403 });
 
   try {
     const body = await req.json();
@@ -117,6 +118,7 @@ export async function POST(req: Request) {
 export async function PATCH(req: Request) {
   const session = await auth();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if ((session.user as any).role !== "ADMIN") return NextResponse.json({ error: "Chỉ Admin được cấu hình lịch" }, { status: 403 });
 
   try {
     const body = await req.json();
@@ -150,6 +152,7 @@ export async function PATCH(req: Request) {
 export async function DELETE() {
   const session = await auth();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if ((session.user as any).role !== "ADMIN") return NextResponse.json({ error: "Chỉ Admin được ngắt kết nối bot" }, { status: 403 });
 
   try {
     const settings = await prisma.lifePlanSettings.findFirst();
