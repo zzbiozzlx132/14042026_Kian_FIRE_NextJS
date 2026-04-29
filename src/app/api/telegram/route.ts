@@ -256,7 +256,8 @@ async function saveTransaction(
   type: "EXPENSE" | "INCOME",
   amount: number,
   description: string,
-  accountIdShort?: string
+  accountIdShort?: string,
+  senderChatId?: string
 ) {
   let targetAccount: any = null;
 
@@ -301,10 +302,18 @@ async function saveTransaction(
   const category = keywordMatch?.category || await prisma.category.findFirst({
     where: { type, status: "active", name: { contains: description, mode: "insensitive" } },
   });
-  const adminUser = await prisma.user.findFirst({
-    where: { role: "ADMIN" },
-    orderBy: { createdAt: "asc" },
-  });
+  // Ghi đúng người gửi lệnh; fallback về admin nếu không tìm được
+  let creatorId: string | null = null;
+  if (senderChatId) {
+    const sender = await prisma.user.findFirst({
+      where: { telegramChatId: senderChatId, telegramPaired: true },
+    });
+    creatorId = sender?.id || null;
+  }
+  if (!creatorId) {
+    const adminUser = await prisma.user.findFirst({ where: { role: "ADMIN" }, orderBy: { createdAt: "asc" } });
+    creatorId = adminUser?.id || null;
+  }
 
   const tx = await prisma.transaction.create({
     data: {
@@ -317,7 +326,7 @@ async function saveTransaction(
       description,
       essential: type === "EXPENSE" ? "NON_ESSENTIAL" : null,
       rating: null,
-      createdById: adminUser?.id || null,
+      createdById: creatorId,
     },
   });
 
@@ -605,7 +614,8 @@ export async function POST(req: Request) {
             decoded.type,
             decoded.amount,
             fullDesc,
-            decoded.accountIdShort
+            decoded.accountIdShort,
+            String(chatId)
           );
           const txId12 = result.txId.slice(0, 12);
 

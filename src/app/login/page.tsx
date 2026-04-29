@@ -13,7 +13,6 @@ export default function LoginPage() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [resetMode, setResetMode] = useState(false);
-  const [resetSuccess, setResetSuccess] = useState("");
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -39,33 +38,6 @@ export default function LoginPage() {
     }
   };
 
-  const handleResetPassword = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!login) {
-      setError("Vui lòng nhập email");
-      return;
-    }
-    setLoading(true);
-    setError("");
-    setResetSuccess("");
-
-    try {
-      const res = await fetch("/api/auth/reset-password", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: login }),
-      });
-      const data = await res.json();
-      if (data.success) {
-        setResetSuccess(data.message);
-      } else {
-        setError(data.error || "Có lỗi xảy ra");
-      }
-    } catch {
-      setError("Lỗi kết nối server");
-    }
-    setLoading(false);
-  };
 
   return (
     <div className="login-page">
@@ -88,49 +60,25 @@ export default function LoginPage() {
 
           {/* Form */}
           {resetMode ? (
-            <form onSubmit={handleResetPassword} className="login-form">
-              <div className="form-group">
-                <label className="form-label">Email đã đăng ký</label>
-                <input
-                  type="text"
-                  className="input"
-                  placeholder="kian@example.com"
-                  value={login}
-                  onChange={(e) => setLogin(e.target.value)}
-                  autoComplete="email"
-                  autoFocus
-                />
-              </div>
-
-              {error && (
-                <div className="login-error">{error}</div>
-              )}
-              {resetSuccess && (
-                <div style={{ color: 'var(--success)', fontSize: 14, margin: '8px 0', padding: '10px 14px', background: 'var(--success-bg)', borderRadius: 10, textAlign: 'center' }}>
-                  {resetSuccess}
+            <div className="login-form">
+              <div style={{ textAlign: 'center', padding: '8px 0 16px' }}>
+                <div style={{ width: 48, height: 48, borderRadius: 14, background: 'var(--accent-muted)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px' }}>
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
                 </div>
-              )}
-
-              <button
-                type="submit"
-                className="btn btn-primary login-btn"
-                disabled={loading}
-              >
-                {loading ? (
-                  <span className="login-spinner" />
-                ) : (
-                  "Đặt lại mật khẩu"
-                )}
-              </button>
-
+                <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 6 }}>Quên mật khẩu?</div>
+                <div style={{ fontSize: 13, color: 'var(--text-muted)', lineHeight: 1.6 }}>
+                  Liên hệ <strong>Admin</strong> để được đặt lại mật khẩu.<br />
+                  Admin đăng nhập vào <strong>Cài đặt → Thành viên</strong> và nhấn "Đặt lại mật khẩu".
+                </div>
+              </div>
               <button
                 type="button"
-                onClick={() => { setResetMode(false); setError(""); setResetSuccess(""); }}
-                style={{ background: 'none', border: 'none', color: 'var(--accent)', cursor: 'pointer', fontSize: 14, marginTop: 12, textAlign: 'center', width: '100%' }}
+                onClick={() => { setResetMode(false); setError(""); }}
+                className="btn btn-primary login-btn"
               >
                 ← Quay lại đăng nhập
               </button>
-            </form>
+            </div>
           ) : (
             <form onSubmit={handleLogin} className="login-form">
               <div className="form-group">

@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useSession } from "next-auth/react";
 import {
   UserCircle, List, Users, Plus, Trash2, Shield, Send, AlertTriangle, X, Pencil,
-  Key, Download, Upload, FileText, Clock, Calendar, Tag, CheckCircle, QrCode, RefreshCw,
+  Key, Download, Upload, FileText, Clock, Tag, CheckCircle, RefreshCw, ExternalLink, Bell,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -56,11 +56,18 @@ export default function SettingsPage() {
 
 /* ═══════ USERS PANEL ═══════ */
 function UsersPanel() {
+  const { data: session } = useSession();
+  const isAdmin = (session?.user as any)?.role === "ADMIN";
+  const currentUserId = (session?.user as any)?.id;
+
   const [users, setUsers] = useState<any[]>([]);
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({ name: "", email: "", username: "", phone: "", password: "", role: "USER" });
   const [loading, setLoading] = useState(false);
   const [deleteModal, setDeleteModal] = useState<string | null>(null);
+  const [resetModal, setResetModal] = useState<{ id: string; name: string; email: string } | null>(null);
+  const [resetPw, setResetPw] = useState("");
+  const [resetLoading, setResetLoading] = useState(false);
   const [pendingPairs, setPendingPairs] = useState<any[]>([]);
 
   const load = useCallback(() => {
@@ -102,6 +109,21 @@ function UsersPanel() {
       toast.error("Xoá thất bại");
     }
     setDeleteModal(null);
+  };
+
+  const handleResetPassword = async () => {
+    if (!resetModal || !resetPw) { toast.error("Nhập mật khẩu mới"); return; }
+    if (resetPw.length < 6) { toast.error("Tối thiểu 6 ký tự"); return; }
+    setResetLoading(true);
+    const res = await fetch("/api/auth/reset-password", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: resetModal.email, newPassword: resetPw }),
+    });
+    const data = await res.json();
+    if (res.ok) { toast.success(`Đã đặt lại mật khẩu cho ${resetModal.name}`); setResetModal(null); setResetPw(""); }
+    else toast.error(data.error || "Thất bại");
+    setResetLoading(false);
   };
 
   const handlePairDecision = async (userId: string, approve: boolean) => {
@@ -217,12 +239,23 @@ function UsersPanel() {
                   {user.phone && <span className="ml-2 opacity-60">{user.phone}</span>}
                 </div>
               </div>
-              <button
-                onClick={() => setDeleteModal(user.id)}
-                className="p-2 text-[var(--text-muted)] hover:text-[var(--danger)] hover:bg-[var(--danger-bg)] rounded-lg transition-colors"
-              >
-                <Trash2 size={16} />
-              </button>
+              {isAdmin && user.id !== currentUserId && (
+                <button
+                  onClick={() => { setResetModal({ id: user.id, name: user.name, email: user.email }); setResetPw(""); }}
+                  className="p-2 text-[var(--text-muted)] hover:text-[var(--accent)] hover:bg-[var(--accent-muted)] rounded-lg transition-colors"
+                  title="Đặt lại mật khẩu"
+                >
+                  <Key size={16} />
+                </button>
+              )}
+              {user.id !== currentUserId && (
+                <button
+                  onClick={() => setDeleteModal(user.id)}
+                  className="p-2 text-[var(--text-muted)] hover:text-[var(--danger)] hover:bg-[var(--danger-bg)] rounded-lg transition-colors"
+                >
+                  <Trash2 size={16} />
+                </button>
+              )}
             </div>
           ))}
         </div>
@@ -235,6 +268,33 @@ function UsersPanel() {
               <div className="flex gap-3">
                 <button onClick={() => setDeleteModal(null)} className="btn btn-ghost flex-1">Hủy</button>
                 <button onClick={() => handleDelete(deleteModal)} className="btn btn-danger flex-1">Xoá</button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {resetModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+            <div className="card w-full max-w-sm animate-in zoom-in-95 duration-200">
+              <h3 className="text-lg font-bold mb-1">Đặt lại mật khẩu</h3>
+              <p className="text-[var(--text-muted)] text-sm mb-4">Cho tài khoản <strong>{resetModal.name}</strong></p>
+              <div className="form-group mb-4">
+                <label className="form-label">Mật khẩu mới (tối thiểu 6 ký tự)</label>
+                <input
+                  type="password"
+                  className="input"
+                  placeholder="••••••••"
+                  value={resetPw}
+                  onChange={e => setResetPw(e.target.value)}
+                  autoFocus
+                  onKeyDown={e => e.key === "Enter" && handleResetPassword()}
+                />
+              </div>
+              <div className="flex gap-3">
+                <button onClick={() => setResetModal(null)} className="btn btn-ghost flex-1">Hủy</button>
+                <button onClick={handleResetPassword} disabled={resetLoading || !resetPw} className="btn btn-primary flex-1">
+                  {resetLoading ? "Đang lưu..." : "Đặt lại"}
+                </button>
               </div>
             </div>
           </div>
@@ -652,6 +712,7 @@ function ProfilePanel() {
   const [name, setName] = useState("");
   const [username, setUsername] = useState("");
   const [phone, setPhone] = useState("");
+  const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [saving, setSaving] = useState(false);
   const [savingPw, setSavingPw] = useState(false);
@@ -665,6 +726,20 @@ function ProfilePanel() {
     });
     fetch("/api/telegram/pair").then(r => r.json()).then(d => setPairInfo(d));
   }, [session?.user?.id]);
+
+  // P5: Auto-poll khi đang chờ admin duyệt pair
+  useEffect(() => {
+    if (!pairInfo || pairInfo.paired) return;
+    const interval = setInterval(() => {
+      fetch("/api/telegram/pair").then(r => r.json()).then(d => {
+        setPairInfo(d);
+        if (d.paired) {
+          toast.success("Đã kết nối Telegram thành công!");
+        }
+      }).catch(() => {});
+    }, 10_000);
+    return () => clearInterval(interval);
+  }, [pairInfo?.paired]);
 
   const handleSaveProfile = async () => {
     if (!user) return;
@@ -686,14 +761,16 @@ function ProfilePanel() {
 
   const handleChangePassword = async () => {
     if (!user || !newPassword) { toast.error("Nhập mật khẩu mới"); return; }
+    if (!currentPassword) { toast.error("Nhập mật khẩu hiện tại"); return; }
     if (newPassword.length < 6) { toast.error("Mật khẩu tối thiểu 6 ký tự"); return; }
     setSavingPw(true);
     const res = await fetch(`/api/users/${user.id}`, {
       method: "PATCH", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ password: newPassword }),
+      body: JSON.stringify({ password: newPassword, oldPassword: currentPassword }),
     });
-    if (res.ok) { setNewPassword(""); toast.success("Đã đổi mật khẩu"); }
-    else toast.error("Đổi mật khẩu thất bại");
+    const d = await res.json();
+    if (res.ok) { setNewPassword(""); setCurrentPassword(""); toast.success("Đã đổi mật khẩu"); }
+    else toast.error(d.error || "Đổi mật khẩu thất bại");
     setSavingPw(false);
   };
 
@@ -739,10 +816,17 @@ function ProfilePanel() {
 
       <div className="card">
         <h3 className="section-label mb-4">Đổi mật khẩu</h3>
-        <div className="flex gap-3 max-w-md">
-          <input type="password" className="input flex-1" placeholder="Mật khẩu mới (tối thiểu 6 ký tự)" value={newPassword} onChange={e => setNewPassword(e.target.value)} />
-          <button onClick={handleChangePassword} disabled={savingPw || !newPassword} className="btn btn-primary text-sm py-2">
-            {savingPw ? "Đang lưu..." : "Đổi"}
+        <div className="space-y-3 max-w-md">
+          <div>
+            <label className="form-label">Mật khẩu hiện tại</label>
+            <input type="password" className="input" placeholder="••••••••" value={currentPassword} onChange={e => setCurrentPassword(e.target.value)} />
+          </div>
+          <div>
+            <label className="form-label">Mật khẩu mới (tối thiểu 6 ký tự)</label>
+            <input type="password" className="input" placeholder="••••••••" value={newPassword} onChange={e => setNewPassword(e.target.value)} />
+          </div>
+          <button onClick={handleChangePassword} disabled={savingPw || !newPassword || !currentPassword} className="btn btn-primary text-sm py-2 px-6">
+            {savingPw ? "Đang lưu..." : "Đổi mật khẩu"}
           </button>
         </div>
       </div>
@@ -775,10 +859,22 @@ function ProfilePanel() {
                     <RefreshCw size={14} className={pairLoading ? "animate-spin" : ""} />
                   </button>
                 </div>
-                <div className="mt-3 text-sm text-[var(--text-secondary)]">
-                  <div>1. Mở Telegram → tìm bot{pairInfo.botUsername ? <> <b>@{pairInfo.botUsername}</b></> : ""}</div>
-                  <div>2. Gõ: <code className="px-1.5 py-0.5 bg-[var(--bg-card)] rounded text-xs font-mono">/pair {pairInfo.code}</code></div>
-                  <div>3. Chờ Admin duyệt — bạn sẽ nhận thông báo qua Telegram</div>
+                <div className="mt-3 space-y-2 text-sm text-[var(--text-secondary)]">
+                  {pairInfo.botUsername ? (
+                    <a
+                      href={`https://t.me/${pairInfo.botUsername}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[var(--accent)] text-white font-semibold text-sm hover:opacity-90 transition-opacity"
+                    >
+                      <ExternalLink size={15} /> Mở @{pairInfo.botUsername} trong Telegram
+                    </a>
+                  ) : null}
+                  <div className="text-xs text-[var(--text-muted)] space-y-1 pt-1">
+                    <div>1. Mở bot Telegram ở trên</div>
+                    <div>2. Gõ: <code className="px-1.5 py-0.5 bg-[var(--bg-card)] rounded font-mono">/pair {pairInfo.code}</code></div>
+                    <div>3. Chờ Admin duyệt — trang này tự cập nhật khi được duyệt</div>
+                  </div>
                 </div>
               </div>
             )}
@@ -799,6 +895,7 @@ function TelegramPanel() {
   const [tokenMasked, setTokenMasked] = useState("");
   const [disconnectConfirm, setDisconnectConfirm] = useState(false);
   const [schedule, setSchedule] = useState<any>({
+    reminderTime: "",
     dailyReportTime: "", weeklyReportDay: "", weeklyReportTime: "",
     monthlyReportDay: "", monthlyReportTime: "",
     quarterlyReport: false, yearlyReport: false, cronSecret: "",
@@ -806,8 +903,6 @@ function TelegramPanel() {
   const [scheduleSaving, setScheduleSaving] = useState(false);
   const [importFile, setImportFile] = useState<File | null>(null);
   const [importing, setImporting] = useState(false);
-  const [cronExpanded, setCronExpanded] = useState(false);
-  const [cronCommands, setCronCommands] = useState<{ label: string; line: string }[]>([]);
 
   useEffect(() => {
     fetch("/api/settings/telegram")
@@ -816,7 +911,7 @@ function TelegramPanel() {
         setConnected(data.connected);
         setBotInfo(data.botInfo);
         setTokenMasked(data.tokenMasked || "");
-        if (data.schedule) setSchedule(data.schedule);
+        if (data.schedule) setSchedule({ ...data.schedule, reminderTime: data.schedule.reminderTime || "" });
       })
       .finally(() => setLoading(false));
   }, []);
@@ -858,33 +953,8 @@ function TelegramPanel() {
     });
     if (res.ok) {
       const data = await res.json();
-      const secret = data.cronSecret || schedule.cronSecret;
-      const saved = { ...schedule, cronSecret: secret };
-      setSchedule(saved);
-      toast.success("Đã lưu cài đặt báo cáo");
-
-      const base = `${window.location.origin}/api/cron/report`;
-      const cmds: { label: string; line: string }[] = [];
-      if (saved.dailyReportTime) {
-        const [h, m] = saved.dailyReportTime.split(":");
-        cmds.push({ label: "Ngày", line: `${m} ${h} * * * curl -s "${base}?type=daily&secret=${secret}" > /dev/null` });
-      }
-      if (saved.weeklyReportDay !== "" && saved.weeklyReportDay !== null && saved.weeklyReportTime) {
-        const [h, m] = saved.weeklyReportTime.split(":");
-        cmds.push({ label: "Tuần", line: `${m} ${h} * * ${saved.weeklyReportDay} curl -s "${base}?type=weekly&secret=${secret}" > /dev/null` });
-      }
-      if (saved.monthlyReportDay && saved.monthlyReportTime) {
-        const [h, m] = saved.monthlyReportTime.split(":");
-        cmds.push({ label: "Tháng", line: `${m} ${h} ${saved.monthlyReportDay} * * curl -s "${base}?type=monthly&secret=${secret}" > /dev/null` });
-      }
-      if (saved.quarterlyReport) {
-        cmds.push({ label: "Quý", line: `0 8 1 1,4,7,10 * curl -s "${base}?type=quarterly&secret=${secret}" > /dev/null` });
-      }
-      if (saved.yearlyReport) {
-        cmds.push({ label: "Năm", line: `0 8 31 12 * curl -s "${base}?type=yearly&secret=${secret}" > /dev/null` });
-      }
-      setCronCommands(cmds);
-      if (cmds.length > 0) setCronExpanded(true);
+      setSchedule((prev: any) => ({ ...prev, cronSecret: data.cronSecret || prev.cronSecret }));
+      toast.success("Đã lưu — lịch báo cáo sẽ tự động chạy");
     } else {
       toast.error("Lưu thất bại");
     }
@@ -962,13 +1032,27 @@ function TelegramPanel() {
         <div className="card p-6">
           <div className="flex items-center gap-2 mb-1">
             <Clock size={16} className="text-[var(--accent)]" />
-            <h3 className="section-label mb-0">Báo cáo tự động qua Telegram</h3>
+            <h3 className="section-label mb-0">Lịch tự động qua Telegram</h3>
           </div>
           <p className="text-xs text-[var(--text-muted)] mb-5">
-            Chọn thời điểm gửi báo cáo. Bot sẽ tự động tổng kết và so sánh với kỳ trước.
+            App tự chạy theo lịch, không cần setup thêm gì trên VPS.
           </p>
 
           <div className="space-y-3">
+            {/* Reminder */}
+            <div className="flex items-center gap-4 p-3 rounded-xl border border-[var(--accent)] bg-[var(--accent-muted)]">
+              <div className="flex-1">
+                <div className="text-sm font-semibold flex items-center gap-1.5">
+                  <Bell size={14} className="text-[var(--accent)]" /> Nhắc nhập thu chi hàng ngày
+                </div>
+                <div className="text-xs text-[var(--text-muted)]">Chỉ nhắc nếu chưa nhập hôm nay — không spam</div>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-[var(--text-muted)]">Lúc</span>
+                <input type="time" className="input w-28 text-sm" value={schedule.reminderTime} onChange={e => setSchedule({...schedule, reminderTime: e.target.value})} />
+              </div>
+            </div>
+
             {/* Daily */}
             <div className="flex items-center gap-4 p-3 rounded-xl border border-[var(--border)] bg-[var(--bg-input)]">
               <div className="flex-1">
@@ -1029,37 +1113,8 @@ function TelegramPanel() {
             </div>
 
             <button onClick={handleSaveSchedule} disabled={scheduleSaving} className="btn btn-primary w-full">
-              {scheduleSaving ? "Đang lưu..." : "Lưu cài đặt báo cáo"}
+              {scheduleSaving ? "Đang lưu..." : "Lưu lịch tự động"}
             </button>
-
-            {/* Cron commands — shown after save, collapsible */}
-            {cronCommands.length > 0 && (
-              <div className="border border-[var(--border)] rounded-xl overflow-hidden">
-                <button
-                  onClick={() => setCronExpanded(!cronExpanded)}
-                  className="w-full flex items-center justify-between px-4 py-3 text-sm font-medium text-[var(--text-secondary)] hover:bg-[var(--bg-input)] transition-colors"
-                >
-                  <span>🛠 Lệnh cài đặt VPS cron <span className="text-xs font-normal text-[var(--text-muted)]">(dán vào terminal VPS)</span></span>
-                  <span className="text-[var(--text-muted)]">{cronExpanded ? "▲" : "▼"}</span>
-                </button>
-                {cronExpanded && (
-                  <div className="px-4 pb-4 space-y-2 bg-[var(--bg-input)]">
-                    <p className="text-xs text-[var(--text-muted)] mb-3">Chạy lệnh <code className="px-1 bg-[var(--bg-card)] rounded">crontab -e</code> trên VPS rồi dán từng dòng vào:</p>
-                    {cronCommands.map((cmd, i) => (
-                      <div key={i} className="flex items-start gap-2 p-3 rounded-lg bg-[var(--bg-card)] border border-[var(--border)]">
-                        <code className="text-[11px] text-[var(--text-secondary)] flex-1 break-all leading-relaxed">{cmd.line}</code>
-                        <button
-                          onClick={() => { navigator.clipboard.writeText(cmd.line); toast.success(`Đã copy lệnh ${cmd.label}`); }}
-                          className="flex-shrink-0 px-2 py-1 rounded text-xs bg-[var(--accent-muted)] text-[var(--accent)] hover:opacity-80 transition-opacity"
-                        >
-                          Copy
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
           </div>
         </div>
       )}

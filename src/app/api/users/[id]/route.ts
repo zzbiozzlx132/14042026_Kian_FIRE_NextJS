@@ -75,6 +75,17 @@ export async function PATCH(req: Request, context: { params: Promise<{ id: strin
     }
     if (body.password) {
       const bcrypt = await import("bcryptjs");
+      // Khi user tự đổi mật khẩu, yêu cầu mật khẩu cũ; admin reset cho người khác thì không cần
+      if (isSelf) {
+        if (!body.oldPassword) {
+          return NextResponse.json({ error: "Vui lòng nhập mật khẩu hiện tại" }, { status: 400 });
+        }
+        const current = await prisma.user.findUnique({ where: { id }, select: { password: true } });
+        const valid = current ? await bcrypt.compare(body.oldPassword, current.password) : false;
+        if (!valid) {
+          return NextResponse.json({ error: "Mật khẩu hiện tại không đúng" }, { status: 400 });
+        }
+      }
       updateData.password = await bcrypt.hash(body.password, 10);
     }
     if (body.telegramPairingCode !== undefined) updateData.telegramPairingCode = body.telegramPairingCode;

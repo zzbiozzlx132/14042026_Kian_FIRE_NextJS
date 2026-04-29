@@ -313,6 +313,9 @@ model LifePlanSettings {
   plannedMonthlyInvest Float   @default(0)
   telegramBotToken     String?
 
+  // Daily reminder (nhắc nhập thu chi)
+  reminderTime       String?  // "21:00" — gửi nhắc nếu user chưa nhập hôm nay
+
   // Telegram scheduled reports
   dailyReportTime    String?  // "22:00"
   weeklyReportDay    Int?     // 0=Sun … 6=Sat

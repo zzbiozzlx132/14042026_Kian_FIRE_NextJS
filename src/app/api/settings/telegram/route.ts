@@ -49,6 +49,7 @@ export async function GET() {
     botInfo,
     tokenMasked: token ? `${token.slice(0, 8)}...${token.slice(-4)}` : "",
     schedule: {
+      reminderTime: settings?.reminderTime || "",
       dailyReportTime: settings?.dailyReportTime || "",
       weeklyReportDay: settings?.weeklyReportDay ?? null,
       weeklyReportTime: settings?.weeklyReportTime || "",
@@ -119,7 +120,7 @@ export async function PATCH(req: Request) {
 
   try {
     const body = await req.json();
-    const { dailyReportTime, weeklyReportDay, weeklyReportTime, monthlyReportDay, monthlyReportTime, quarterlyReport, yearlyReport } = body;
+    const { reminderTime, dailyReportTime, weeklyReportDay, weeklyReportTime, monthlyReportDay, monthlyReportTime, quarterlyReport, yearlyReport } = body;
 
     const existing = await prisma.lifePlanSettings.findFirst();
     const finalSecret = existing?.cronSecret || crypto.randomBytes(16).toString("hex");
@@ -127,6 +128,7 @@ export async function PATCH(req: Request) {
     await prisma.lifePlanSettings.upsert({
       where: { id: "default" },
       update: {
+        ...(reminderTime !== undefined ? { reminderTime: reminderTime || null } : {}),
         ...(dailyReportTime !== undefined ? { dailyReportTime: dailyReportTime || null } : {}),
         ...(weeklyReportDay !== undefined ? { weeklyReportDay: weeklyReportDay !== null && weeklyReportDay !== "" ? Number(weeklyReportDay) : null } : {}),
         ...(weeklyReportTime !== undefined ? { weeklyReportTime: weeklyReportTime || null } : {}),

@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useSession } from "next-auth/react";
 import { Header } from "@/components/layout/header";
 import { fmtMoney, fmtDate } from "@/lib/utils";
-import { Wallet, TrendingUp, CreditCard, ArrowUpRight, ArrowDownRight, Activity, ReceiptText } from "lucide-react";
+import { Wallet, TrendingUp, CreditCard, ArrowUpRight, ArrowDownRight, Activity, ReceiptText, Send, ExternalLink } from "lucide-react";
 import Link from "next/link";
 
 interface DashboardData {
@@ -22,6 +22,7 @@ export default function DashboardPage() {
   const { data: session } = useSession();
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [pairInfo, setPairInfo] = useState<{ paired: boolean; code?: string; botUsername?: string } | null>(null);
 
   useEffect(() => {
     fetch("/api/dashboard")
@@ -31,6 +32,7 @@ export default function DashboardPage() {
       })
       .then(d => { setData(d); setLoading(false); })
       .catch(() => setLoading(false));
+    fetch("/api/telegram/pair").then(r => r.json()).then(d => setPairInfo(d)).catch(() => {});
   }, []);
 
   const d = data || {
@@ -43,6 +45,39 @@ export default function DashboardPage() {
   return (
     <div className="animate-in fade-in duration-500">
       <Header userName={session?.user?.name || "Bạn"} />
+
+      {/* Onboarding banner — chỉ hiện khi chưa pair Telegram */}
+      {pairInfo && !pairInfo.paired && pairInfo.code && (
+        <div className="mb-6 rounded-2xl border border-blue-200 bg-blue-50 dark:bg-blue-950/30 dark:border-blue-800 p-5 flex flex-col sm:flex-row sm:items-center gap-4 animate-in fade-in duration-300">
+          <div className="w-11 h-11 rounded-xl bg-blue-100 dark:bg-blue-900 text-blue-600 flex items-center justify-center flex-shrink-0">
+            <Send size={20} />
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="font-semibold text-sm text-blue-900 dark:text-blue-100 mb-0.5">
+              Còn 1 bước để bắt đầu — Kết nối Telegram
+            </div>
+            <div className="text-xs text-blue-700 dark:text-blue-300">
+              Mã của bạn: <code className="font-bold tracking-widest text-sm bg-blue-100 dark:bg-blue-900 px-1.5 py-0.5 rounded">{pairInfo.code}</code>
+              {" "}— Mở bot Telegram, gõ <code className="bg-blue-100 dark:bg-blue-900 px-1 rounded text-xs">/pair {pairInfo.code}</code>
+            </div>
+          </div>
+          {pairInfo.botUsername && (
+            <a
+              href={`https://t.me/${pairInfo.botUsername}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-2 px-4 py-2 rounded-xl bg-blue-600 text-white text-sm font-semibold hover:bg-blue-700 transition-colors flex-shrink-0"
+            >
+              Mở Telegram <ExternalLink size={14} />
+            </a>
+          )}
+          {!pairInfo.botUsername && (
+            <Link href="/settings?tab=telegram" className="flex items-center gap-2 px-4 py-2 rounded-xl bg-blue-600 text-white text-sm font-semibold hover:bg-blue-700 transition-colors flex-shrink-0">
+              Cài đặt bot <ExternalLink size={14} />
+            </Link>
+          )}
+        </div>
+      )}
 
       {/* Hero: Net Worth */}
       <div className="card-glass overflow-hidden relative mb-8">
