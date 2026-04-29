@@ -5,6 +5,7 @@ import { useSession } from "next-auth/react";
 import {
   UserCircle, List, Users, Plus, Trash2, Shield, Send, AlertTriangle, X, Pencil,
   Key, Download, Upload, FileText, Clock, Tag, CheckCircle, RefreshCw, ExternalLink, Bell,
+  Eye, EyeOff,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -62,11 +63,14 @@ function UsersPanel() {
 
   const [users, setUsers] = useState<any[]>([]);
   const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState({ name: "", email: "", username: "", phone: "", password: "", role: "USER" });
+  const [form, setForm] = useState({ name: "", email: "", username: "", phone: "", password: "", confirmPassword: "", role: "USER" });
+  const [showFormPass, setShowFormPass] = useState(false);
+  const [showFormConfirm, setShowFormConfirm] = useState(false);
   const [loading, setLoading] = useState(false);
   const [deleteModal, setDeleteModal] = useState<string | null>(null);
   const [resetModal, setResetModal] = useState<{ id: string; name: string; email: string } | null>(null);
   const [resetPw, setResetPw] = useState("");
+  const [showResetPw, setShowResetPw] = useState(false);
   const [resetLoading, setResetLoading] = useState(false);
   const [pendingPairs, setPendingPairs] = useState<any[]>([]);
 
@@ -82,16 +86,21 @@ function UsersPanel() {
       toast.error("Vui lòng điền Tên, Email và Mật khẩu");
       return;
     }
+    if (form.password !== form.confirmPassword) {
+      toast.error("Mật khẩu xác nhận không khớp");
+      return;
+    }
     setLoading(true);
+    const { confirmPassword, ...payload } = form;
     const res = await fetch("/api/users", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(form),
+      body: JSON.stringify(payload),
     });
     const data = await res.json();
     if (res.ok) {
       setUsers(prev => [...prev, data]);
-      setForm({ name: "", email: "", username: "", phone: "", password: "", role: "USER" });
+      setForm({ name: "", email: "", username: "", phone: "", password: "", confirmPassword: "", role: "USER" });
       setShowForm(false);
       toast.success("Đã thêm thành viên");
     } else {
@@ -121,7 +130,7 @@ function UsersPanel() {
       body: JSON.stringify({ email: resetModal.email, newPassword: resetPw }),
     });
     const data = await res.json();
-    if (res.ok) { toast.success(`Đã đặt lại mật khẩu cho ${resetModal.name}`); setResetModal(null); setResetPw(""); }
+    if (res.ok) { toast.success(`Đã đặt lại mật khẩu cho ${resetModal.name}`); setResetModal(null); setResetPw(""); setShowResetPw(false); }
     else toast.error(data.error || "Thất bại");
     setResetLoading(false);
   };
@@ -194,7 +203,24 @@ function UsersPanel() {
               </div>
               <div>
                 <label className="form-label">Mật khẩu *</label>
-                <input className="input" type="password" placeholder="Tối thiểu 6 ký tự" value={form.password} onChange={e => setForm({...form, password: e.target.value})} />
+                <div className="relative">
+                  <input className="input pr-10" type={showFormPass ? "text" : "password"} placeholder="Tối thiểu 6 ký tự" value={form.password} onChange={e => setForm({...form, password: e.target.value})} />
+                  <button type="button" onClick={() => setShowFormPass(v => !v)} className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)] hover:text-[var(--text)]">
+                    {showFormPass ? <EyeOff size={16} /> : <Eye size={16} />}
+                  </button>
+                </div>
+              </div>
+              <div>
+                <label className="form-label">Xác nhận mật khẩu *</label>
+                <div className="relative">
+                  <input className="input pr-10" type={showFormConfirm ? "text" : "password"} placeholder="Nhập lại mật khẩu" value={form.confirmPassword} onChange={e => setForm({...form, confirmPassword: e.target.value})} />
+                  <button type="button" onClick={() => setShowFormConfirm(v => !v)} className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)] hover:text-[var(--text)]">
+                    {showFormConfirm ? <EyeOff size={16} /> : <Eye size={16} />}
+                  </button>
+                </div>
+                {form.confirmPassword && form.password !== form.confirmPassword && (
+                  <p className="text-xs text-[var(--danger)] mt-1">Mật khẩu không khớp</p>
+                )}
               </div>
               <div>
                 <label className="form-label">Vai trò</label>
@@ -280,15 +306,20 @@ function UsersPanel() {
               <p className="text-[var(--text-muted)] text-sm mb-4">Cho tài khoản <strong>{resetModal.name}</strong></p>
               <div className="form-group mb-4">
                 <label className="form-label">Mật khẩu mới (tối thiểu 6 ký tự)</label>
-                <input
-                  type="password"
-                  className="input"
-                  placeholder="••••••••"
-                  value={resetPw}
-                  onChange={e => setResetPw(e.target.value)}
-                  autoFocus
-                  onKeyDown={e => e.key === "Enter" && handleResetPassword()}
-                />
+                <div className="relative">
+                  <input
+                    type={showResetPw ? "text" : "password"}
+                    className="input pr-10"
+                    placeholder="••••••••"
+                    value={resetPw}
+                    onChange={e => setResetPw(e.target.value)}
+                    autoFocus
+                    onKeyDown={e => e.key === "Enter" && handleResetPassword()}
+                  />
+                  <button type="button" onClick={() => setShowResetPw(v => !v)} className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)] hover:text-[var(--text)]">
+                    {showResetPw ? <EyeOff size={16} /> : <Eye size={16} />}
+                  </button>
+                </div>
               </div>
               <div className="flex gap-3">
                 <button onClick={() => setResetModal(null)} className="btn btn-ghost flex-1">Hủy</button>
