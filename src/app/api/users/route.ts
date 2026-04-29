@@ -17,10 +17,13 @@ export async function GET() {
   }
 }
 
-// POST create user
+// POST create user — admin only
 export async function POST(req: Request) {
   const session = await auth();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if ((session.user as any).role !== "ADMIN") {
+    return NextResponse.json({ error: "Chỉ Admin được tạo tài khoản mới" }, { status: 403 });
+  }
 
   try {
     const body = await req.json();

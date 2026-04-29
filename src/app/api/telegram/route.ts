@@ -778,17 +778,14 @@ export async function POST(req: Request) {
       return NextResponse.json({ ok: true });
     }
 
-    // Check if user is paired (for non-admin commands)
+    // Chỉ paired users mới được gửi lệnh giao dịch
     const senderChatId = String(chatId);
     const pairedUser = await prisma.user.findFirst({
       where: { telegramChatId: senderChatId, telegramPaired: true },
     });
-    // Allow admin user (the one who set up the bot) to always use it
-    const adminUser = await prisma.user.findFirst({ where: { role: "ADMIN" }, orderBy: { createdAt: "asc" } });
-    const isAuthorized = pairedUser || (adminUser?.telegramChatId === null);
 
-    if (!isAuthorized) {
-      await send(token, chatId, "❌ Tài khoản của bạn chưa được kết nối.\n\nVào web → Cài đặt → Telegram để lấy mã kết nối, rồi gõ <code>/pair MÃ</code> ở đây.");
+    if (!pairedUser) {
+      await send(token, chatId, "❌ Tài khoản của bạn chưa được kết nối.\n\nVào web → Cài đặt → Tài khoản → kéo xuống mục Telegram để lấy mã, rồi gõ <code>/pair MÃ</code> ở đây.");
       return NextResponse.json({ ok: true });
     }
 
