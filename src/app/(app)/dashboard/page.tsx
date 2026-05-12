@@ -1,11 +1,27 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { type ReactNode, useEffect, useState } from "react";
 import { useSession } from "next-auth/react";
 import { Header } from "@/components/layout/header";
-import { fmtMoney, fmtDate } from "@/lib/utils";
-import { Wallet, TrendingUp, CreditCard, ArrowUpRight, ArrowDownRight, Activity, ReceiptText, Send, ExternalLink } from "lucide-react";
+import { CHART_COLORS } from "@/lib/constants";
+import { fmtMoney, fmtMoneyCompact, fmtDate } from "@/lib/utils";
+import { TrendingUp, CreditCard, ArrowUpRight, ArrowDownRight, Activity, ReceiptText, Send, ExternalLink } from "lucide-react";
 import Link from "next/link";
+import {
+  Area,
+  AreaChart,
+  Bar,
+  BarChart,
+  CartesianGrid,
+  Cell,
+  Legend,
+  Pie,
+  PieChart,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
 
 interface DashboardData {
   netWorth: number;
@@ -15,29 +31,53 @@ interface DashboardData {
   totalInvest: number;
   monthlyIncome: number;
   monthlyExpense: number;
+  rangeDays: number;
+  periodIncome: number;
+  periodExpense: number;
+  periodNet: number;
+  avgDailyExpense: number;
+  biggestExpenseDay: { label: string; expense: number } | null;
+  dailyFlow: { date: string; label: string; income: number; expense: number; net: number }[];
+  expenseByCategory: { name: string; value: number }[];
+  expenseByAccount: { name: string; value: number }[];
   recentTransactions: any[];
 }
+
+const RANGE_OPTIONS = [
+  { label: "7 ngày", value: 7 },
+  { label: "30 ngày", value: 30 },
+  { label: "90 ngày", value: 90 },
+];
 
 export default function DashboardPage() {
   const { data: session } = useSession();
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [range, setRange] = useState(30);
   const [pairInfo, setPairInfo] = useState<{ paired: boolean; code?: string; botUsername?: string } | null>(null);
 
   useEffect(() => {
-    fetch("/api/dashboard")
+    setLoading(true);
+    fetch(`/api/dashboard?range=${range}`)
       .then(r => {
         if (!r.ok) throw new Error("API Error");
         return r.json();
       })
       .then(d => { setData(d); setLoading(false); })
       .catch(() => setLoading(false));
+  }, [range]);
+
+  useEffect(() => {
     fetch("/api/telegram/pair").then(r => r.json()).then(d => setPairInfo(d)).catch(() => {});
   }, []);
 
   const d = data || {
     netWorth: 0, totalAssets: 0, totalDebt: 0, totalCredit: 0,
-    totalInvest: 0, monthlyIncome: 0, monthlyExpense: 0, recentTransactions: []
+    totalInvest: 0, monthlyIncome: 0, monthlyExpense: 0,
+    rangeDays: range, periodIncome: 0, periodExpense: 0, periodNet: 0,
+    avgDailyExpense: 0, biggestExpenseDay: null,
+    dailyFlow: [], expenseByCategory: [], expenseByAccount: [],
+    recentTransactions: []
   };
 
   const month = new Date().getMonth() + 1;
@@ -116,11 +156,46 @@ export default function DashboardPage() {
         <StatCard icon={TrendingUp} label="Tổng đầu tư" value={d.totalInvest} color="accent" loading={loading} />
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Chart placeholder */}
-        <div className="card lg:col-span-2 min-h-[280px] flex flex-col items-center justify-center border-dashed border-[var(--border)]">
-          <p className="text-[var(--text-muted)] text-sm font-medium">Biểu đồ thu chi theo tháng</p>
-          <p className="text-[var(--text-muted)] text-xs mt-1">(Sẽ hiển thị khi có dữ liệu giao dịch)</p>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+        <div className="card lg:col-span-2 min-h-[360px]">
+          <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4 mb-5">
+            <div>
+              <div className="section-label mb-1">Dòng tiền</div>
+              <div className="text-sm text-[var(--text-muted)]">
+                Thu, chi và chênh lệch trong {d.rangeDays} ngày gần nhất
+              </div>
+            </div>
+            <RangeSelector value={range} onChange={setRange} />
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">
+            <MiniMetric label="Thu" value={d.periodIncome} tone="success" loading={loading} />
+            <MiniMetric label="Chi" value={d.periodExpense} tone="danger" loading={loading} />
+            <MiniMetric label="Còn lại" value={d.periodNet} tone={d.periodNet >= 0 ? "success" : "danger"} loading={loading} />
+            <MiniMetric label="Chi/ngày" value={d.avgDailyExpense} tone="muted" loading={loading} />
+          </div>
+          <ChartEmpty loading={loading} hasData={d.dailyFlow.some(day => day.income > 0 || day.expense > 0)}>
+            <ResponsiveContainer width="100%" height={250}>
+              <AreaChart data={d.dailyFlow} margin={{ top: 8, right: 8, left: -18, bottom: 0 }}>
+                <defs>
+                  <linearGradient id="incomeFill" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#059669" stopOpacity={0.22} />
+                    <stop offset="95%" stopColor="#059669" stopOpacity={0.02} />
+                  </linearGradient>
+                  <linearGradient id="expenseFill" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#DC2626" stopOpacity={0.22} />
+                    <stop offset="95%" stopColor="#DC2626" stopOpacity={0.02} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
+                <XAxis dataKey="label" tick={{ fontSize: 11, fill: "var(--text-muted)" }} tickLine={false} axisLine={false} minTickGap={18} />
+                <YAxis tick={{ fontSize: 11, fill: "var(--text-muted)" }} tickLine={false} axisLine={false} tickFormatter={(value) => fmtMoneyCompact(Number(value))} />
+                <Tooltip content={<MoneyTooltip />} />
+                <Legend iconType="circle" wrapperStyle={{ fontSize: 12 }} />
+                <Area type="monotone" name="Thu" dataKey="income" stroke="#059669" fill="url(#incomeFill)" strokeWidth={2} />
+                <Area type="monotone" name="Chi" dataKey="expense" stroke="#DC2626" fill="url(#expenseFill)" strokeWidth={2} />
+              </AreaChart>
+            </ResponsiveContainer>
+          </ChartEmpty>
         </div>
 
         {/* Recent Transactions */}
@@ -162,6 +237,140 @@ export default function DashboardPage() {
             Xem tất cả
           </Link>
         </div>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="card min-h-[320px]">
+          <div className="section-label mb-1">Chi theo hạng mục</div>
+          <div className="text-sm text-[var(--text-muted)] mb-5">Nhóm nào đang lấy nhiều tiền nhất</div>
+          <ChartEmpty loading={loading} hasData={d.expenseByCategory.length > 0}>
+            <ResponsiveContainer width="100%" height={245}>
+              <PieChart>
+                <Pie
+                  data={d.expenseByCategory}
+                  dataKey="value"
+                  nameKey="name"
+                  innerRadius={58}
+                  outerRadius={88}
+                  paddingAngle={2}
+                >
+                  {d.expenseByCategory.map((entry, index) => (
+                    <Cell key={entry.name} fill={CHART_COLORS[index % CHART_COLORS.length]} />
+                  ))}
+                </Pie>
+                <Tooltip content={<MoneyTooltip />} />
+                <Legend iconType="circle" wrapperStyle={{ fontSize: 12 }} />
+              </PieChart>
+            </ResponsiveContainer>
+          </ChartEmpty>
+        </div>
+
+        <div className="card min-h-[320px]">
+          <div className="section-label mb-1">Chi theo tài khoản</div>
+          <div className="text-sm text-[var(--text-muted)] mb-5">Tiền ra từ ví/ngân hàng/thẻ nào</div>
+          <ChartEmpty loading={loading} hasData={d.expenseByAccount.length > 0}>
+            <ResponsiveContainer width="100%" height={245}>
+              <BarChart data={d.expenseByAccount} layout="vertical" margin={{ top: 4, right: 14, left: 12, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" horizontal={false} />
+                <XAxis type="number" tickFormatter={(value) => fmtMoneyCompact(Number(value))} tick={{ fontSize: 11, fill: "var(--text-muted)" }} tickLine={false} axisLine={false} />
+                <YAxis type="category" dataKey="name" width={88} tick={{ fontSize: 11, fill: "var(--text-muted)" }} tickLine={false} axisLine={false} />
+                <Tooltip content={<MoneyTooltip />} />
+                <Bar dataKey="value" name="Chi" radius={[0, 8, 8, 0]}>
+                  {d.expenseByAccount.map((entry, index) => (
+                    <Cell key={entry.name} fill={CHART_COLORS[(index + 3) % CHART_COLORS.length]} />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </ChartEmpty>
+        </div>
+
+        <div className="card min-h-[320px]">
+          <div className="section-label mb-1">Điểm nóng chi tiêu</div>
+          <div className="text-sm text-[var(--text-muted)] mb-5">Tóm tắt theo khoảng thời gian đang chọn</div>
+          <div className="space-y-4">
+            <InsightRow label="Ngày chi nhiều nhất" value={d.biggestExpenseDay?.expense ? `${d.biggestExpenseDay.label} · ${fmtMoney(d.biggestExpenseDay.expense)}` : "Chưa có dữ liệu"} />
+            <InsightRow label="Hạng mục lớn nhất" value={d.expenseByCategory[0] ? `${d.expenseByCategory[0].name} · ${fmtMoney(d.expenseByCategory[0].value)}` : "Chưa có dữ liệu"} />
+            <InsightRow label="Tài khoản chi nhiều" value={d.expenseByAccount[0] ? `${d.expenseByAccount[0].name} · ${fmtMoney(d.expenseByAccount[0].value)}` : "Chưa có dữ liệu"} />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function RangeSelector({ value, onChange }: { value: number; onChange: (value: number) => void }) {
+  return (
+    <div className="inline-flex h-10 items-center rounded-xl bg-[var(--bg-input)] p-1">
+      {RANGE_OPTIONS.map(option => (
+        <button
+          key={option.value}
+          type="button"
+          onClick={() => onChange(option.value)}
+          className={`h-8 px-3 rounded-lg text-xs font-semibold transition-colors ${
+            value === option.value
+              ? "bg-[var(--bg-card)] text-[var(--text-primary)] shadow-sm"
+              : "text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+          }`}
+        >
+          {option.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function MiniMetric({ label, value, tone, loading }: { label: string; value: number; tone: string; loading: boolean }) {
+  const toneClass: Record<string, string> = {
+    success: "text-[var(--success)]",
+    danger: "text-[var(--danger)]",
+    muted: "text-[var(--text-primary)]",
+  };
+
+  return (
+    <div className="rounded-xl bg-[var(--bg-input)] px-3 py-2.5">
+      <div className="text-[10px] font-semibold uppercase tracking-wider text-[var(--text-muted)] mb-1">{label}</div>
+      <div className={`text-sm font-bold ${toneClass[tone] || toneClass.muted}`}>
+        {loading ? "..." : fmtMoney(value)}
+      </div>
+    </div>
+  );
+}
+
+function ChartEmpty({ loading, hasData, children }: { loading: boolean; hasData: boolean; children: ReactNode }) {
+  if (loading) return <div className="skeleton h-[245px] w-full rounded-xl" />;
+  if (!hasData) {
+    return (
+      <div className="h-[245px] flex items-center justify-center rounded-xl bg-[var(--bg-input)] text-sm text-[var(--text-muted)]">
+        Chưa có dữ liệu trong khoảng này
+      </div>
+    );
+  }
+  return <>{children}</>;
+}
+
+function InsightRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-xl bg-[var(--bg-input)] p-4">
+      <div className="text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)] mb-1">{label}</div>
+      <div className="text-sm font-bold leading-snug">{value}</div>
+    </div>
+  );
+}
+
+function MoneyTooltip({ active, payload, label }: any) {
+  if (!active || !payload?.length) return null;
+  return (
+    <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-card)] px-3 py-2 shadow-lg">
+      {label && <div className="text-xs font-semibold text-[var(--text-muted)] mb-1">{label}</div>}
+      <div className="space-y-1">
+        {payload.map((item: any) => (
+          <div key={`${item.name}-${item.dataKey || item.value}`} className="flex items-center gap-2 text-xs">
+            <span className="h-2 w-2 rounded-full" style={{ backgroundColor: item.color }} />
+            <span className="text-[var(--text-muted)]">{item.name}</span>
+            <span className="font-bold">{fmtMoney(item.value)}</span>
+          </div>
+        ))}
       </div>
     </div>
   );
