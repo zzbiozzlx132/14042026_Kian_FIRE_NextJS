@@ -15,6 +15,12 @@ const INV_UNIT: Record<string, string> = {
   GOLD: "chỉ", STOCK: "cổ phiếu", CRYPTO: "coin", REAL_ESTATE: "BĐS", TERM_DEPOSIT: "sổ", OTHER: "đơn vị",
 };
 
+function clampStatementDay(value: string) {
+  const n = Number(value.replace(/[^0-9]/g, ""));
+  if (!n) return "";
+  return Math.min(31, Math.max(1, n)).toString();
+}
+
 export default function AssetsPage() {
   const [activeTab, setActiveTab] = useState("accounts");
   const [accounts, setAccounts] = useState<any[]>([]);
@@ -142,8 +148,22 @@ export default function AssetsPage() {
                         {acc.creditUsed > 0 ? `-${fmtMoney(acc.creditUsed)}` : fmtMoney(0)}
                       </div>
                       {acc.creditLimit > 0 && (
-                        <div className="text-xs text-[var(--text-muted)] mt-1">
-                          Hạn mức: {fmtMoney(acc.creditLimit)} · Khả dụng: {fmtMoney(acc.creditAvailable)}
+                        <div className="mt-2 space-y-2">
+                          <div className="text-xs text-[var(--text-muted)]">
+                            Hạn mức: {fmtMoney(acc.creditLimit)} · Khả dụng: {fmtMoney(acc.creditAvailable)}
+                          </div>
+                          <div className="h-2 rounded-full bg-[var(--bg-input)] overflow-hidden">
+                            <div
+                              className="h-full rounded-full bg-[var(--danger)]"
+                              style={{ width: `${Math.min(100, Math.max(0, (acc.creditUsed / acc.creditLimit) * 100))}%` }}
+                            />
+                          </div>
+                          {(acc.statementDay || acc.dueDay) && (
+                            <div className="flex gap-2 text-[10px] text-[var(--text-muted)]">
+                              {acc.statementDay && <span>Chốt ngày {acc.statementDay}</span>}
+                              {acc.dueDay && <span>Đến hạn ngày {acc.dueDay}</span>}
+                            </div>
+                          )}
                         </div>
                       )}
                     </div>
@@ -211,7 +231,7 @@ export default function AssetsPage() {
       {showInvModal && <AddInvestmentModal onClose={() => setShowInvModal(false)} onCreated={(inv: any) => { setInvestments(prev => [inv, ...prev]); setShowInvModal(false); }} />}
       {editInv && <EditInvestmentModal inv={editInv} onClose={() => setEditInv(null)} onUpdated={(updated: any) => { setInvestments(prev => prev.map(i => i.id === updated.id ? updated : i)); setEditInv(null); }} />}
       {sellTarget && <SellInvestmentModal inv={sellTarget} onClose={() => setSellTarget(null)} onSold={handleSellComplete} />}
-      {editAccount && <EditAccountModal acc={editAccount} onClose={() => setEditAccount(null)} onUpdated={(updated: any) => { setAccounts(prev => prev.map(a => a.id === updated.id ? { ...a, ...updated, computedBalance: (updated.initialBalance || 0) + (a.computedBalance || 0) - (a.initialBalance || 0) } : a)); setEditAccount(null); }} />}
+      {editAccount && <EditAccountModal acc={editAccount} onClose={() => setEditAccount(null)} onUpdated={(updated: any) => { setAccounts(prev => prev.map(a => a.id === updated.id ? { ...a, ...updated } : a)); setEditAccount(null); }} />}
 
       {/* ═══ DELETE CONFIRM MODAL ═══ */}
       {deleteTarget && (
@@ -339,13 +359,28 @@ function AddAccountModal({ onClose, onCreated }: { onClose: () => void; onCreate
   const [name, setName] = useState("");
   const [type, setType] = useState("BANK");
   const [balance, setBalance] = useState("");
+  const [creditDebt, setCreditDebt] = useState("");
+  const [creditLimit, setCreditLimit] = useState("");
+  const [statementDay, setStatementDay] = useState("");
+  const [dueDay, setDueDay] = useState("");
   const [loading, setLoading] = useState(false);
 
   const handleSubmit = async () => {
     if (!name) { toast.error("Vui lòng nhập tên tài khoản"); return; }
+    if (type === "CREDIT_CARD" && parseAmount(creditLimit) <= 0) {
+      toast.error("Vui lòng nhập hạn mức tín dụng");
+      return;
+    }
     setLoading(true);
     const res = await fetch("/api/accounts", { method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name, type, initialBalance: parseAmount(balance) }) });
+      body: JSON.stringify({
+        name,
+        type,
+        initialBalance: type === "CREDIT_CARD" ? -parseAmount(creditDebt) : parseAmount(balance),
+        creditLimit: type === "CREDIT_CARD" ? parseAmount(creditLimit) : undefined,
+        statementDay: type === "CREDIT_CARD" ? Number(statementDay) || null : undefined,
+        dueDay: type === "CREDIT_CARD" ? Number(dueDay) || null : undefined,
+      }) });
     if (res.ok) { toast.success("Đã thêm tài khoản"); onCreated(await res.json()); }
     else toast.error("Thêm thất bại");
     setLoading(false);
@@ -366,7 +401,33 @@ function AddAccountModal({ onClose, onCreated }: { onClose: () => void; onCreate
             <option value="SAVINGS">Tiết kiệm</option>
           </select>
         </div>
-        <div className="form-group"><label className="form-label">Số dư ban đầu (VNĐ)</label><MoneyInput placeholder="0" value={balance} onChange={setBalance} /></div>
+        {type === "CREDIT_CARD" ? (
+          <>
+            <div className="form-group">
+              <label className="form-label">Dư nợ hiện tại (VNĐ)</label>
+              <MoneyInput placeholder="VD: 6.504.534" value={creditDebt} onChange={setCreditDebt} />
+              <p className="text-xs text-[var(--text-muted)] mt-1">
+                Nhập số tiền đang dùng trên thẻ. App sẽ tự tính đây là khoản nợ.
+              </p>
+            </div>
+            <div className="form-group">
+              <label className="form-label">Hạn mức tín dụng (VNĐ)</label>
+              <MoneyInput placeholder="VD: 24.700.000" value={creditLimit} onChange={setCreditLimit} />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="form-group">
+                <label className="form-label">Ngày chốt sao kê</label>
+                <input className="input" inputMode="numeric" placeholder="VD: 20" value={statementDay} onChange={e => setStatementDay(clampStatementDay(e.target.value))} />
+              </div>
+              <div className="form-group">
+                <label className="form-label">Ngày đến hạn</label>
+                <input className="input" inputMode="numeric" placeholder="VD: 10" value={dueDay} onChange={e => setDueDay(clampStatementDay(e.target.value))} />
+              </div>
+            </div>
+          </>
+        ) : (
+          <div className="form-group"><label className="form-label">Số dư ban đầu (VNĐ)</label><MoneyInput placeholder="0" value={balance} onChange={setBalance} /></div>
+        )}
         <div className="flex gap-3 mt-6"><button onClick={onClose} className="btn btn-ghost flex-1">Hủy</button><button onClick={handleSubmit} disabled={loading} className="btn btn-primary flex-1">{loading ? "Đang tạo..." : "Tạo tài khoản"}</button></div>
       </div>
     </div>
@@ -599,11 +660,18 @@ function SellInvestmentModal({ inv, onClose, onSold }: { inv: any; onClose: () =
 function EditAccountModal({ acc, onClose, onUpdated }: { acc: any; onClose: () => void; onUpdated: (updated: any) => void }) {
   const [name, setName] = useState(acc.name);
   const [initialBalance, setInitialBalance] = useState(acc.initialBalance?.toString() || "0");
+  const [creditDebt, setCreditDebt] = useState((acc.creditUsed || Math.max(0, -(acc.initialBalance || 0))).toString());
   const [creditLimit, setCreditLimit] = useState(acc.creditLimit?.toString() || "0");
+  const [statementDay, setStatementDay] = useState(acc.statementDay?.toString() || "");
+  const [dueDay, setDueDay] = useState(acc.dueDay?.toString() || "");
   const [loading, setLoading] = useState(false);
 
   const handleSubmit = async () => {
     if (!name.trim()) { toast.error("Tên tài khoản không được trống"); return; }
+    if (acc.type === "CREDIT_CARD" && parseAmount(creditLimit) <= 0) {
+      toast.error("Vui lòng nhập hạn mức tín dụng");
+      return;
+    }
     setLoading(true);
     const res = await fetch("/api/accounts", {
       method: "PATCH",
@@ -611,8 +679,11 @@ function EditAccountModal({ acc, onClose, onUpdated }: { acc: any; onClose: () =
       body: JSON.stringify({
         id: acc.id,
         name: name.trim(),
-        initialBalance: parseAmount(initialBalance),
+        initialBalance: acc.type === "CREDIT_CARD" ? undefined : parseAmount(initialBalance),
+        targetCreditUsed: acc.type === "CREDIT_CARD" ? parseAmount(creditDebt) : undefined,
         creditLimit: acc.type === "CREDIT_CARD" ? parseAmount(creditLimit) : undefined,
+        statementDay: acc.type === "CREDIT_CARD" ? Number(statementDay) || null : undefined,
+        dueDay: acc.type === "CREDIT_CARD" ? Number(dueDay) || null : undefined,
       }),
     });
     if (res.ok) {
@@ -649,10 +720,29 @@ function EditAccountModal({ acc, onClose, onUpdated }: { acc: any; onClose: () =
               </p>
             </div>
           ) : (
-            <div className="form-group">
-              <label className="form-label">Hạn mức tín dụng (VNĐ)</label>
-              <MoneyInput value={creditLimit} onChange={setCreditLimit} />
-            </div>
+            <>
+              <div className="form-group">
+                <label className="form-label">Dư nợ hiện tại (VNĐ)</label>
+                <MoneyInput placeholder="VD: 6.504.534" value={creditDebt} onChange={setCreditDebt} />
+                <p className="text-xs text-[var(--text-muted)] mt-1">
+                  Với VP Shopee đang dùng 6.504.534đ, nhập 6.504.534. App sẽ tự cân lại số dư ban đầu để dư nợ hiện tại khớp thực tế.
+                </p>
+              </div>
+              <div className="form-group">
+                <label className="form-label">Hạn mức tín dụng (VNĐ)</label>
+                <MoneyInput placeholder="VD: 24.700.000" value={creditLimit} onChange={setCreditLimit} />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="form-group">
+                  <label className="form-label">Ngày chốt sao kê</label>
+                  <input className="input" inputMode="numeric" placeholder="VD: 20" value={statementDay} onChange={e => setStatementDay(clampStatementDay(e.target.value))} />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Ngày đến hạn</label>
+                  <input className="input" inputMode="numeric" placeholder="VD: 10" value={dueDay} onChange={e => setDueDay(clampStatementDay(e.target.value))} />
+                </div>
+              </div>
+            </>
           )}
 
           <div className="p-3 rounded-xl bg-[var(--bg-input)] text-xs space-y-1">
@@ -671,6 +761,10 @@ function EditAccountModal({ acc, onClose, onUpdated }: { acc: any; onClose: () =
                 <div className="flex justify-between">
                   <span className="text-[var(--text-muted)]">Nợ đang dùng</span>
                   <span className="font-bold text-[var(--danger)]">{acc.creditUsed > 0 ? fmtMoney(acc.creditUsed) : "0đ"}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-[var(--text-muted)]">Khả dụng</span>
+                  <span className="font-bold">{fmtMoney(acc.creditAvailable || 0)}</span>
                 </div>
               </>
             )}

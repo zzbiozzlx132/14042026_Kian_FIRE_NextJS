@@ -7,10 +7,15 @@ import { prisma } from "@/lib/prisma";
  *
  * Formats: "chi 50k cafe", "thu 5tr luong", "-200 tien nha", "+500k freelance"
  *          "chi 20k cafe vcb"  ← auto-detect account từ cuối message
+ *          "chuyen 1tr vcb sang momo" ← luân chuyển giữa 2 tài khoản
+ *          ">500k tm vcb" ← luân chuyển nhanh từ tiền mặt sang vcb
  * Commands: /balance, /today, /help
  *
  * Flow: User nhắn → Bot show preview + nút Lưu/Đổi TK/Huỷ → Confirm → Lưu DB
  */
+
+type MoneyTxType = "EXPENSE" | "INCOME";
+type TelegramTxType = MoneyTxType | "TRANSFER";
 
 // ══════════════════════════════════════════════════════════
 // ACCOUNT MATCHING — Nhận diện tài khoản từ shorthand
@@ -224,7 +229,7 @@ function encodeCallback(
   desc: string,
   accountIdShort?: string
 ): string {
-  const t = type === "EXPENSE" ? "E" : "I";
+  const t = type === "EXPENSE" ? "E" : type === "TRANSFER" ? "T" : "I";
   const shortDesc = byteSlice(desc, 16);
   const base = `${action}|${t}|${amount}|${shortDesc}`;
   return accountIdShort ? `${base}|${accountIdShort}` : base;
@@ -232,20 +237,70 @@ function encodeCallback(
 
 function decodeCallback(data: string): {
   action: string;
-  type: "EXPENSE" | "INCOME";
+  type: TelegramTxType;
   amount: number;
   description: string;
   accountIdShort?: string;
 } | null {
   const parts = data.split("|");
   if (parts.length < 4) return null;
+  const type =
+    parts[1] === "E" ? "EXPENSE" :
+    parts[1] === "T" ? "TRANSFER" :
+    "INCOME";
   return {
     action: parts[0],
-    type: parts[1] === "E" ? "EXPENSE" : "INCOME",
+    type,
     amount: parseFloat(parts[2]),
     description: parts[3],
     accountIdShort: parts[4] || undefined,
   };
+}
+
+function splitTransferAccountIds(accountIdShort?: string): {
+  fromIdShort?: string;
+  toIdShort?: string;
+} {
+  const [fromIdShort, toIdShort] = (accountIdShort || "").split(">");
+  return { fromIdShort: fromIdShort || undefined, toIdShort: toIdShort || undefined };
+}
+
+async function findAccountByShort(accountIdShort?: string) {
+  if (!accountIdShort) return null;
+  const accounts = await prisma.account.findMany({
+    where: {
+      status: "active",
+      type: { in: ["CASH", "BANK", "E_WALLET", "SAVINGS", "CREDIT_CARD"] },
+    },
+  });
+  return accounts.find((a: any) => a.id.startsWith(accountIdShort)) || null;
+}
+
+async function getCreatorId(senderChatId?: string) {
+  if (senderChatId) {
+    const sender = await prisma.user.findFirst({
+      where: { telegramChatId: senderChatId, telegramPaired: true },
+    });
+    if (sender?.id) return sender.id;
+  }
+
+  const adminUser = await prisma.user.findFirst({
+    where: { role: "ADMIN" },
+    orderBy: { createdAt: "asc" },
+  });
+  return adminUser?.id || null;
+}
+
+async function getAccountBalance(account: any): Promise<number> {
+  const incoming = await prisma.transaction.aggregate({
+    _sum: { amount: true },
+    where: { toAccountId: account.id },
+  });
+  const outgoing = await prisma.transaction.aggregate({
+    _sum: { amount: true },
+    where: { fromAccountId: account.id },
+  });
+  return account.initialBalance + (incoming._sum.amount || 0) - (outgoing._sum.amount || 0);
 }
 
 // ══════════════════════════════════════════════════════════
@@ -253,7 +308,7 @@ function decodeCallback(data: string): {
 // ══════════════════════════════════════════════════════════
 
 async function saveTransaction(
-  type: "EXPENSE" | "INCOME",
+  type: MoneyTxType,
   amount: number,
   description: string,
   accountIdShort?: string,
@@ -293,6 +348,12 @@ async function saveTransaction(
     if (amount > balance) {
       throw new Error(`Số dư ${targetAccount.name} không đủ. Hiện có: ${Math.round(balance).toLocaleString("vi-VN")}đ`);
     }
+  } else if (type === "EXPENSE" && targetAccount?.type === "CREDIT_CARD" && targetAccount.creditLimit) {
+    const balance = await getAccountBalance(targetAccount);
+    const available = targetAccount.creditLimit + balance;
+    if (amount > available) {
+      throw new Error(`Hạn mức ${targetAccount.name} không đủ. Khả dụng: ${Math.round(available).toLocaleString("vi-VN")}đ`);
+    }
   }
 
   // Find category: keyword match first, then name match
@@ -303,17 +364,7 @@ async function saveTransaction(
     where: { type, status: "active", name: { contains: description, mode: "insensitive" } },
   });
   // Ghi đúng người gửi lệnh; fallback về admin nếu không tìm được
-  let creatorId: string | null = null;
-  if (senderChatId) {
-    const sender = await prisma.user.findFirst({
-      where: { telegramChatId: senderChatId, telegramPaired: true },
-    });
-    creatorId = sender?.id || null;
-  }
-  if (!creatorId) {
-    const adminUser = await prisma.user.findFirst({ where: { role: "ADMIN" }, orderBy: { createdAt: "asc" } });
-    creatorId = adminUser?.id || null;
-  }
+  const creatorId = await getCreatorId(senderChatId);
 
   const tx = await prisma.transaction.create({
     data: {
@@ -334,6 +385,63 @@ async function saveTransaction(
     txId: tx.id,
     accountName: targetAccount?.name,
     categoryName: category?.name,
+  };
+}
+
+async function saveTransferTransaction(
+  amount: number,
+  description: string,
+  fromIdShort?: string,
+  toIdShort?: string,
+  senderChatId?: string
+) {
+  const fromAccount = await findAccountByShort(fromIdShort);
+  const toAccount = await findAccountByShort(toIdShort);
+
+  if (!fromAccount || !toAccount) {
+    throw new Error("Không tìm thấy tài khoản chuyển/nhận.");
+  }
+  if (fromAccount.id === toAccount.id) {
+    throw new Error("Tài khoản chuyển và nhận không được trùng nhau.");
+  }
+
+  const balance = await getAccountBalance(fromAccount);
+  if (fromAccount.type !== "CREDIT_CARD") {
+    if (amount > balance) {
+      throw new Error(`Số dư ${fromAccount.name} không đủ. Hiện có: ${Math.round(balance).toLocaleString("vi-VN")}đ`);
+    }
+  } else if (fromAccount.creditLimit) {
+    const available = fromAccount.creditLimit + balance;
+    if (amount > available) {
+      throw new Error(`Hạn mức ${fromAccount.name} không đủ. Khả dụng: ${Math.round(available).toLocaleString("vi-VN")}đ`);
+    }
+  }
+
+  const creatorId = await getCreatorId(senderChatId);
+  const category = await prisma.category.findFirst({
+    where: { type: "TRANSFER", status: "active" },
+    orderBy: { sortOrder: "asc" },
+  });
+
+  const tx = await prisma.transaction.create({
+    data: {
+      date: new Date(),
+      type: "TRANSFER",
+      amount,
+      fromAccountId: fromAccount.id,
+      toAccountId: toAccount.id,
+      categoryId: category?.id || null,
+      description,
+      essential: null,
+      rating: null,
+      createdById: creatorId,
+    },
+  });
+
+  return {
+    txId: tx.id,
+    fromAccountName: fromAccount.name,
+    toAccountName: toAccount.name,
   };
 }
 
@@ -369,9 +477,14 @@ async function handleBalance(token: string, chatId: number) {
 
       let balance: number;
       if (acc.type === "CREDIT_CARD") {
-        const creditUsed = totalOut - totalIn;
-        balance = -creditUsed;
-        msg += `<b>${acc.name}</b> [Thẻ]\n   Nợ: ${creditUsed > 0 ? `-${fmtVND(creditUsed)}` : "0đ"}${acc.creditLimit ? ` / ${fmtVND(acc.creditLimit)}` : ""}\n\n`;
+        balance = acc.initialBalance + totalIn - totalOut;
+        const creditUsed = Math.max(0, -balance);
+        const available = (acc.creditLimit || 0) - creditUsed;
+        msg += `<b>${acc.name}</b> [Thẻ]\n   Nợ: ${creditUsed > 0 ? `-${fmtVND(creditUsed)}` : "0đ"}${acc.creditLimit ? ` / ${fmtVND(acc.creditLimit)}` : ""}\n`;
+        if (acc.creditLimit) {
+          msg += `   Khả dụng: ${fmtVND(available)}\n`;
+        }
+        msg += "\n";
       } else {
         balance = acc.initialBalance + totalIn - totalOut;
         const typeLabel =
@@ -438,6 +551,12 @@ async function handleHelp(token: string, chatId: number) {
 <code>thu 5tr luong mb</code>
 <code>chi 50k xang momo</code>
 
+<b>Luân chuyển tiền:</b>
+<code>&gt;500k tm vcb</code>
+<code>&gt; 1tr vcb momo</code>
+<code>chuyen 1tr vcb sang momo</code>
+<code>ck 500k cash momo</code>
+
 Bot hỏi xác nhận trước khi lưu.
 Bấm <b>Đổi TK</b> để chọn tài khoản khác.
 
@@ -452,7 +571,7 @@ Bấm <b>Đổi TK</b> để chọn tài khoản khác.
 
 function parseMessage(
   text: string
-): { type: "EXPENSE" | "INCOME"; amount: number; description: string } | null {
+): { type: MoneyTxType; amount: number; description: string } | null {
   text = text.trim();
 
   const match1 = text.match(/^(chi|thu)\s+([\d.]+(?:k|tr|m|\d)*)\s*(.*)$/i);
@@ -486,12 +605,82 @@ function parseMessage(
   return null;
 }
 
+function findAccountFromQuery(query: string, accounts: any[]) {
+  return accounts.find((a) => accountMatchesQuery(query, a)) || null;
+}
+
+function parseTransferMessage(
+  text: string,
+  accounts: any[]
+): { type: "TRANSFER"; amount: number; description: string; fromAccount: any; toAccount: any } | null {
+  const tokens = text.trim().split(/\s+/).filter(Boolean);
+  if (tokens.length < 3) return null;
+
+  const n0 = normalizeVi(tokens[0]);
+  const n1 = normalizeVi(tokens[1] || "");
+  let amountToken = "";
+  let rest: string[] = [];
+
+  if (tokens[0] === ">" || tokens[0] === "->") {
+    amountToken = tokens[1] || "";
+    rest = tokens.slice(2);
+  } else if (tokens[0].startsWith(">")) {
+    amountToken = tokens[0].slice(1);
+    rest = tokens.slice(1);
+  } else if (n0 === "luan" && n1 === "chuyen") {
+    amountToken = tokens[2] || "";
+    rest = tokens.slice(3);
+  } else if (n0 === "chuyen" && n1 === "khoan") {
+    amountToken = tokens[2] || "";
+    rest = tokens.slice(3);
+  } else if (["chuyen", "ck", "transfer"].includes(n0)) {
+    amountToken = tokens[1] || "";
+    rest = tokens.slice(2);
+  }
+
+  if (!amountToken || rest.length < 2) return null;
+
+  const amount = parseAmount(amountToken);
+  if (amount <= 0) return null;
+
+  const separators = new Set(["sang", "qua", "toi", "den", "vao", "->", ">"]);
+  const sepIndex = rest.findIndex((w) => separators.has(w) || separators.has(normalizeVi(w)));
+
+  let fromAccount: any = null;
+  let toAccount: any = null;
+
+  if (sepIndex > 0 && sepIndex < rest.length - 1) {
+    fromAccount = findAccountFromQuery(rest.slice(0, sepIndex).join(" "), accounts);
+    toAccount = findAccountFromQuery(rest.slice(sepIndex + 1).join(" "), accounts);
+  } else {
+    for (let i = 1; i < rest.length; i++) {
+      const from = findAccountFromQuery(rest.slice(0, i).join(" "), accounts);
+      const to = findAccountFromQuery(rest.slice(i).join(" "), accounts);
+      if (from && to && from.id !== to.id) {
+        fromAccount = from;
+        toAccount = to;
+        break;
+      }
+    }
+  }
+
+  if (!fromAccount || !toAccount || fromAccount.id === toAccount.id) return null;
+
+  return {
+    type: "TRANSFER",
+    amount,
+    description: `Luân chuyển ${fromAccount.name} -> ${toAccount.name}`,
+    fromAccount,
+    toAccount,
+  };
+}
+
 // ══════════════════════════════════════════════════════════
 // BUILD CONFIRM MESSAGE & BUTTONS
 // ══════════════════════════════════════════════════════════
 
 function buildConfirmMsg(
-  type: "EXPENSE" | "INCOME",
+  type: MoneyTxType,
   amount: number,
   desc: string,
   accountName?: string
@@ -506,7 +695,7 @@ function buildConfirmMsg(
 }
 
 function buildConfirmButtons(
-  type: "EXPENSE" | "INCOME",
+  type: MoneyTxType,
   amount: number,
   desc: string,
   accountIdShort: string | undefined,
@@ -527,6 +716,37 @@ function buildConfirmButtons(
   row1.push({ text: switchLabel, callback_data: switchData });
   row1.push({ text: "❌ Huỷ", callback_data: cancelData });
 
+  return { inline_keyboard: [row1] };
+}
+
+function buildTransferConfirmMsg(
+  amount: number,
+  desc: string,
+  fromAccountName?: string,
+  toAccountName?: string
+): string {
+  let msg = `🔵 <b>Luân chuyển</b>\n💰 ${fmtVND(amount)}`;
+  if (fromAccountName) msg += `\n🏦 Từ: ${fromAccountName}`;
+  if (toAccountName) msg += `\n💳 Đến: ${toAccountName}`;
+  msg += `\n📝 ${desc}\n\n👇 <b>Xác nhận lưu?</b>`;
+  return msg;
+}
+
+function buildTransferConfirmButtons(
+  amount: number,
+  desc: string,
+  fromIdShort: string,
+  toIdShort: string,
+  hasMultipleAccounts: boolean
+) {
+  const accountPair = `${fromIdShort}>${toIdShort}`;
+  const saveData = encodeCallback("SAVE", "TRANSFER", amount, desc, accountPair);
+  const cancelData = encodeCallback("CANCEL", "TRANSFER", amount, desc);
+  const row1: any[] = [{ text: "✅ Lưu", callback_data: saveData }];
+  if (hasMultipleAccounts) {
+    row1.push({ text: "💳 Đổi TK", callback_data: encodeCallback("TACCT", "TRANSFER", amount, desc, accountPair) });
+  }
+  row1.push({ text: "❌ Huỷ", callback_data: cancelData });
   return { inline_keyboard: [row1] };
 }
 
@@ -599,8 +819,47 @@ export async function POST(req: Request) {
       }
 
       // ── SAVE ──
+      if (decoded.action === "SAVE" && decoded.type === "TRANSFER") {
+        try {
+          const msgText: string = cb.message?.text || "";
+          const descMatch = msgText.match(/📝 (.+?)(?:\n|$)/);
+          const fullDesc = descMatch ? descMatch[1].trim() : decoded.description;
+          const { fromIdShort, toIdShort } = splitTransferAccountIds(decoded.accountIdShort);
+
+          await answerCallback(token, callbackId, "Đang lưu...");
+          await clearKeyboard(token, chatId, messageId);
+
+          const result = await saveTransferTransaction(
+            decoded.amount,
+            fullDesc,
+            fromIdShort,
+            toIdShort,
+            String(chatId)
+          );
+
+          await editMessage(
+            token, chatId, messageId,
+            `🔵 <b>Luân chuyển:</b> ${fmtVND(decoded.amount)}\n` +
+            `🏦 Từ: ${result.fromAccountName}\n` +
+            `💳 Đến: ${result.toAccountName}\n` +
+            `📝 ${fullDesc}` +
+            `\n\n✅ <b>Đã lưu thành công!</b>`
+          );
+        } catch (err: any) {
+          const msg = err?.message || "Lỗi khi lưu";
+          await answerCallback(token, callbackId, msg.slice(0, 200));
+          await editMessage(token, chatId, messageId, `❌ ${msg}`);
+        }
+        return NextResponse.json({ ok: true });
+      }
+
       if (decoded.action === "SAVE" || decoded.action === "ACCS") {
         try {
+          if (decoded.type === "TRANSFER") {
+            await answerCallback(token, callbackId, "Dữ liệu không hợp lệ");
+            return NextResponse.json({ ok: true });
+          }
+
           // Recover full description from message text to avoid callback truncation
           const msgText: string = cb.message?.text || "";
           const descMatch = msgText.match(/📝 (.+?)(?:\n|$)/);
@@ -651,6 +910,95 @@ export async function POST(req: Request) {
           await answerCallback(token, callbackId, msg.slice(0, 200));
           await editMessage(token, chatId, messageId, `❌ ${msg}`);
         }
+        return NextResponse.json({ ok: true });
+      }
+
+      // ── TACCT — choose which side of a transfer to change ──
+      if (decoded.action === "TACCT") {
+        const { fromIdShort, toIdShort } = splitTransferAccountIds(decoded.accountIdShort);
+        const fromAccount = await findAccountByShort(fromIdShort);
+        const toAccount = await findAccountByShort(toIdShort);
+        const accountPair = `${fromIdShort || ""}>${toIdShort || ""}`;
+        const rows = [
+          [
+            { text: "🏦 Đổi TK đi", callback_data: encodeCallback("TFROM", "TRANSFER", decoded.amount, decoded.description, accountPair) },
+            { text: "💳 Đổi TK đến", callback_data: encodeCallback("TTO", "TRANSFER", decoded.amount, decoded.description, accountPair) },
+          ],
+          [{ text: "❌ Huỷ", callback_data: encodeCallback("CANCEL", "TRANSFER", decoded.amount, decoded.description) }],
+        ];
+
+        await answerCallback(token, callbackId);
+        await editMessage(
+          token, chatId, messageId,
+          `💳 <b>Đổi tài khoản luân chuyển</b>\n` +
+          `Từ: ${fromAccount?.name || "?"}\n` +
+          `Đến: ${toAccount?.name || "?"}\n` +
+          `${fmtVND(decoded.amount)} · ${decoded.description}`,
+          { inline_keyboard: rows }
+        );
+        return NextResponse.json({ ok: true });
+      }
+
+      // ── TFROM/TTO — list accounts for transfer side ──
+      if (decoded.action === "TFROM" || decoded.action === "TTO") {
+        const accounts = await prisma.account.findMany({
+          where: { status: "active", type: { in: ["CASH", "BANK", "E_WALLET", "SAVINGS", "CREDIT_CARD"] } },
+          orderBy: { createdAt: "asc" },
+        });
+        const { fromIdShort, toIdShort } = splitTransferAccountIds(decoded.accountIdShort);
+        const acctButtons = accounts.map((a: any) => {
+          const short = a.id.slice(0, 10);
+          const pair = decoded.action === "TFROM"
+            ? `${short}>${toIdShort || ""}`
+            : `${fromIdShort || ""}>${short}`;
+          return {
+            text: `${a.name}`,
+            callback_data: encodeCallback(decoded.action === "TFROM" ? "TSETF" : "TSETT", "TRANSFER", decoded.amount, decoded.description, pair),
+          };
+        });
+
+        const rows: any[][] = [];
+        for (let i = 0; i < acctButtons.length; i += 2) {
+          rows.push(acctButtons.slice(i, i + 2));
+        }
+        rows.push([{ text: "❌ Huỷ", callback_data: encodeCallback("CANCEL", "TRANSFER", decoded.amount, decoded.description) }]);
+
+        await answerCallback(token, callbackId);
+        await editMessage(
+          token, chatId, messageId,
+          decoded.action === "TFROM"
+            ? `🏦 <b>Chọn tài khoản chuyển đi</b>\n${fmtVND(decoded.amount)} · ${decoded.description}`
+            : `💳 <b>Chọn tài khoản nhận</b>\n${fmtVND(decoded.amount)} · ${decoded.description}`,
+          { inline_keyboard: rows }
+        );
+        return NextResponse.json({ ok: true });
+      }
+
+      // ── TSETF/TSETT — rebuild transfer preview after account change ──
+      if (decoded.action === "TSETF" || decoded.action === "TSETT") {
+        const { fromIdShort, toIdShort } = splitTransferAccountIds(decoded.accountIdShort);
+        const fromAccount = await findAccountByShort(fromIdShort);
+        const toAccount = await findAccountByShort(toIdShort);
+        if (!fromAccount || !toAccount || fromAccount.id === toAccount.id) {
+          await answerCallback(token, callbackId, "Tài khoản không hợp lệ");
+          return NextResponse.json({ ok: true });
+        }
+
+        const desc = `Luân chuyển ${fromAccount.name} -> ${toAccount.name}`;
+        const buttons = buildTransferConfirmButtons(
+          decoded.amount,
+          desc,
+          fromAccount.id.slice(0, 10),
+          toAccount.id.slice(0, 10),
+          true
+        );
+
+        await answerCallback(token, callbackId);
+        await editMessage(
+          token, chatId, messageId,
+          buildTransferConfirmMsg(decoded.amount, desc, fromAccount.name, toAccount.name),
+          buttons
+        );
         return NextResponse.json({ ok: true });
       }
 
@@ -789,17 +1137,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ ok: true });
     }
 
-    // Parse transaction
-    const parsed = parseMessage(text);
-    if (!parsed) {
-      await send(
-        token, chatId,
-        `Không hiểu. Gõ /help để xem hướng dẫn.\n\nVí dụ:\n<code>chi 50k cà phê</code>\n<code>chi 20k cafe vcb</code>\n<code>thu 5tr lương mb</code>`
-      );
-      return NextResponse.json({ ok: true });
-    }
-
-    // Tìm tài khoản từ cuối description
+    // Tìm tài khoản để parse cả thu/chi lẫn luân chuyển
     const accounts = await prisma.account.findMany({
       where: {
         status: "active",
@@ -808,6 +1146,43 @@ export async function POST(req: Request) {
       orderBy: { createdAt: "asc" },
     });
 
+    // Parse transaction
+    const transferParsed = parseTransferMessage(text, accounts);
+    if (transferParsed) {
+      const fromIdShort = transferParsed.fromAccount.id.slice(0, 10);
+      const toIdShort = transferParsed.toAccount.id.slice(0, 10);
+      const buttons = buildTransferConfirmButtons(
+        transferParsed.amount,
+        transferParsed.description,
+        fromIdShort,
+        toIdShort,
+        accounts.length > 1
+      );
+
+      await send(
+        token,
+        chatId,
+        buildTransferConfirmMsg(
+          transferParsed.amount,
+          transferParsed.description,
+          transferParsed.fromAccount.name,
+          transferParsed.toAccount.name
+        ),
+        buttons
+      );
+      return NextResponse.json({ ok: true });
+    }
+
+    const parsed = parseMessage(text);
+    if (!parsed) {
+      await send(
+        token, chatId,
+        `Không hiểu. Gõ /help để xem hướng dẫn.\n\nVí dụ:\n<code>chi 50k cà phê</code>\n<code>chi 20k cafe vcb</code>\n<code>thu 5tr lương mb</code>\n<code>chuyen 1tr vcb sang momo</code>`
+      );
+      return NextResponse.json({ ok: true });
+    }
+
+    // Tìm tài khoản từ cuối description
     const { cleanDesc, account: detectedAccount } = extractAccount(
       parsed.description,
       accounts

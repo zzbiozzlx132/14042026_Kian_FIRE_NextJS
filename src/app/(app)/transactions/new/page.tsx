@@ -37,6 +37,8 @@ export default function NewTransactionPage() {
   }, []);
 
   const filteredCategories = categories.filter(c => c.type === type);
+  const selectedFromAccount = accounts.find(a => a.id === fromAccountId);
+  const selectedToAccount = accounts.find(a => a.id === toAccountId);
 
   const handleAmountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const raw = e.target.value;
@@ -224,6 +226,11 @@ export default function NewTransactionPage() {
                     <option key={a.id} value={a.id}>{a.name}</option>
                   ))}
                 </select>
+                {type === "EXPENSE" && selectedFromAccount?.type === "CREDIT_CARD" && (
+                  <p className="text-xs text-[var(--text-muted)] mt-1">
+                    Chi bằng thẻ tín dụng sẽ tăng dư nợ thẻ, không trừ tiền mặt/ngân hàng.
+                  </p>
+                )}
               </div>
             )}
 
@@ -240,6 +247,11 @@ export default function NewTransactionPage() {
                     <option key={a.id} value={a.id}>{a.name}</option>
                   ))}
                 </select>
+                {type === "TRANSFER" && selectedToAccount?.type === "CREDIT_CARD" && (
+                  <p className="text-xs text-[var(--text-muted)] mt-1">
+                    Đây là thanh toán thẻ: app giảm dư nợ thẻ và không tính thêm chi tiêu.
+                  </p>
+                )}
               </div>
             )}
           </div>

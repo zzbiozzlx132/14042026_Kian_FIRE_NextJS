@@ -42,15 +42,26 @@ export async function POST(req: Request) {
     if (!body.amount || body.amount <= 0) {
         return NextResponse.json({ error: "Số tiền không hợp lệ" }, { status: 400 });
     }
+    if (body.type === "TRANSFER" && body.fromAccountId && body.toAccountId && body.fromAccountId === body.toAccountId) {
+      return NextResponse.json({ error: "Tài khoản chuyển và nhận không được trùng nhau" }, { status: 400 });
+    }
 
-    // Block if insufficient balance (non-credit-card accounts)
+    // Block if insufficient balance or credit limit exceeded
     if ((body.type === "EXPENSE" || body.type === "TRANSFER") && body.fromAccountId) {
       const account = await prisma.account.findUnique({ where: { id: body.fromAccountId } });
-      if (account && account.type !== "CREDIT_CARD") {
+      if (account) {
         const incoming = await prisma.transaction.aggregate({ _sum: { amount: true }, where: { toAccountId: account.id } });
         const outgoing = await prisma.transaction.aggregate({ _sum: { amount: true }, where: { fromAccountId: account.id } });
         const currentBalance = account.initialBalance + (incoming._sum.amount || 0) - (outgoing._sum.amount || 0);
-        if (body.amount > currentBalance) {
+
+        if (account.type === "CREDIT_CARD") {
+          const available = (account.creditLimit || 0) + currentBalance;
+          if (account.creditLimit && body.amount > available) {
+            return NextResponse.json({
+              error: `Hạn mức ${account.name} không đủ. Khả dụng: ${Math.round(available).toLocaleString("vi-VN")}đ, cần: ${Math.round(body.amount).toLocaleString("vi-VN")}đ`
+            }, { status: 400 });
+          }
+        } else if (body.amount > currentBalance) {
           return NextResponse.json({
             error: `Số dư ${account.name} không đủ. Hiện có: ${Math.round(currentBalance).toLocaleString("vi-VN")}đ, cần: ${Math.round(body.amount).toLocaleString("vi-VN")}đ`
           }, { status: 400 });

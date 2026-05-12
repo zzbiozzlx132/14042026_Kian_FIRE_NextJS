@@ -2,6 +2,40 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/lib/auth";
 
+async function enrichAccount(acc: any) {
+  const incoming = await prisma.transaction.aggregate({
+    _sum: { amount: true },
+    where: { toAccountId: acc.id },
+  });
+  const outgoing = await prisma.transaction.aggregate({
+    _sum: { amount: true },
+    where: { fromAccountId: acc.id },
+  });
+
+  const totalIn = incoming._sum.amount || 0;
+  const totalOut = outgoing._sum.amount || 0;
+  const computedBalance = acc.initialBalance + totalIn - totalOut;
+
+  if (acc.type === "CREDIT_CARD") {
+    const creditUsed = Math.max(0, -computedBalance);
+    return {
+      ...acc,
+      computedBalance,
+      creditUsed,
+      creditAvailable: (acc.creditLimit || 0) - creditUsed,
+      creditOverpaid: Math.max(0, computedBalance),
+    };
+  }
+
+  return {
+    ...acc,
+    computedBalance,
+    creditUsed: 0,
+    creditAvailable: 0,
+    creditOverpaid: 0,
+  };
+}
+
 export async function GET() {
   const session = await auth();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -11,39 +45,7 @@ export async function GET() {
   });
 
   // Compute real balance for each account
-  const enriched = await Promise.all(accounts.map(async (acc) => {
-    const incoming = await prisma.transaction.aggregate({
-      _sum: { amount: true },
-      where: { toAccountId: acc.id },
-    });
-    const outgoing = await prisma.transaction.aggregate({
-      _sum: { amount: true },
-      where: { fromAccountId: acc.id },
-    });
-
-    const totalIn = incoming._sum.amount || 0;
-    const totalOut = outgoing._sum.amount || 0;
-
-    if (acc.type === "CREDIT_CARD") {
-      // Credit card: nợ đang dùng = chi tiêu - đã trả
-      // outgoing = chi tiêu (quẹt thẻ), incoming = trả nợ
-      const creditUsed = totalOut - totalIn;
-      return {
-        ...acc,
-        computedBalance: -creditUsed, // negative = debt
-        creditUsed: creditUsed,       // positive = amount owed
-        creditAvailable: (acc.creditLimit || 0) - creditUsed,
-      };
-    } else {
-      // Normal: số dư = initialBalance + thu - chi
-      return {
-        ...acc,
-        computedBalance: acc.initialBalance + totalIn - totalOut,
-        creditUsed: 0,
-        creditAvailable: 0,
-      };
-    }
-  }));
+  const enriched = await Promise.all(accounts.map(enrichAccount));
 
   return NextResponse.json(enriched);
 }
@@ -69,7 +71,7 @@ export async function POST(req: Request) {
       }
     });
 
-    return NextResponse.json(account, { status: 201 });
+    return NextResponse.json(await enrichAccount(account), { status: 201 });
   } catch (error) {
     return NextResponse.json({ error: "Thêm tài khoản thất bại" }, { status: 400 });
   }
@@ -105,15 +107,23 @@ export async function PATCH(req: Request) {
 
   try {
     const body = await req.json();
-    const { id, name, initialBalance, creditLimit, note } = body;
+    const { id, name, initialBalance, creditLimit, note, statementDay, dueDay, targetCreditUsed } = body;
 
     if (!id) return NextResponse.json({ error: "Missing id" }, { status: 400 });
 
     const { aliases } = body;
     const updateData: any = {};
     if (name !== undefined) updateData.name = name;
-    if (initialBalance !== undefined) updateData.initialBalance = Number(initialBalance) || 0;
+    if (targetCreditUsed !== undefined) {
+      const incoming = await prisma.transaction.aggregate({ _sum: { amount: true }, where: { toAccountId: id } });
+      const outgoing = await prisma.transaction.aggregate({ _sum: { amount: true }, where: { fromAccountId: id } });
+      updateData.initialBalance = -(Number(targetCreditUsed) || 0) - (incoming._sum.amount || 0) + (outgoing._sum.amount || 0);
+    } else if (initialBalance !== undefined) {
+      updateData.initialBalance = Number(initialBalance) || 0;
+    }
     if (creditLimit !== undefined) updateData.creditLimit = creditLimit ? Number(creditLimit) : null;
+    if (statementDay !== undefined) updateData.statementDay = statementDay ? Number(statementDay) : null;
+    if (dueDay !== undefined) updateData.dueDay = dueDay ? Number(dueDay) : null;
     if (note !== undefined) updateData.note = note;
     if (aliases !== undefined) updateData.aliases = aliases;
 
@@ -122,7 +132,7 @@ export async function PATCH(req: Request) {
       data: updateData,
     });
 
-    return NextResponse.json(account);
+    return NextResponse.json(await enrichAccount(account));
   } catch (error) {
     return NextResponse.json({ error: "Cập nhật tài khoản thất bại" }, { status: 400 });
   }

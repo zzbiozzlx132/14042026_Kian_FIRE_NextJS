@@ -104,12 +104,6 @@ export async function GET(req: Request) {
     txThisMonth.forEach((tx: any) => {
       if (tx.type === "INCOME") monthlyIncome += tx.amount;
       else if (tx.type === "EXPENSE") monthlyExpense += tx.amount;
-      else if (tx.type === "TRANSFER") {
-        const fromType = tx.fromAccount?.type;
-        const toType = tx.toAccount?.type;
-        if (fromType !== "CREDIT_CARD" && toType === "CREDIT_CARD") monthlyExpense += tx.amount;
-        if (fromType === "CREDIT_CARD" && toType !== "CREDIT_CARD") monthlyIncome += tx.amount;
-      }
     });
 
     // 5. Previous month for comparison
@@ -124,12 +118,6 @@ export async function GET(req: Request) {
     txPrevMonth.forEach((tx: any) => {
       if (tx.type === "INCOME") prevIncome += tx.amount;
       else if (tx.type === "EXPENSE") prevExpense += tx.amount;
-      else if (tx.type === "TRANSFER") {
-        const fromType = tx.fromAccount?.type;
-        const toType = tx.toAccount?.type;
-        if (fromType !== "CREDIT_CARD" && toType === "CREDIT_CARD") prevExpense += tx.amount;
-        if (fromType === "CREDIT_CARD" && toType !== "CREDIT_CARD") prevIncome += tx.amount;
-      }
     });
 
     return NextResponse.json({
