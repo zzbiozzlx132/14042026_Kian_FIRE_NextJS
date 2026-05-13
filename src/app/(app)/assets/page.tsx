@@ -15,6 +15,29 @@ const INV_UNIT: Record<string, string> = {
   GOLD: "chỉ", STOCK: "cổ phiếu", CRYPTO: "coin", REAL_ESTATE: "BĐS", TERM_DEPOSIT: "sổ", OTHER: "đơn vị",
 };
 
+const VN_STOCK_SYMBOL_PRESETS = [
+  "FPT",
+  "VNM",
+  "HPG",
+  "VCB",
+  "BID",
+  "CTG",
+  "TCB",
+  "MBB",
+  "SSI",
+  "VND",
+  "MWG",
+  "VIC",
+  "VHM",
+  "GAS",
+  "ACB",
+  "HDB",
+  "VPB",
+  "STB",
+  "PNJ",
+  "REE",
+];
+
 function clampStatementDay(value: string) {
   const n = Number(value.replace(/[^0-9]/g, ""));
   if (!n) return "";
@@ -570,15 +593,30 @@ function AddInvestmentModal({ onClose, onCreated }: { onClose: () => void; onCre
             </p>
           </div>
           {form.autoPriceEnabled && form.type !== "GOLD" && (
-            <div className="form-group col-span-2">
-              <label className="form-label">Mã tự động (Symbol)</label>
-              <input
-                className="input"
-                placeholder="VD: FPT, VNM hoặc AAPL"
-                value={form.autoPriceSymbol}
-                onChange={e => setForm({ ...form, autoPriceSymbol: e.target.value })}
-              />
-            </div>
+            <>
+              <div className="form-group">
+                <label className="form-label">Preset mã VN</label>
+                <select
+                  className="input"
+                  value={VN_STOCK_SYMBOL_PRESETS.includes(form.autoPriceSymbol.toUpperCase()) ? form.autoPriceSymbol.toUpperCase() : ""}
+                  onChange={e => setForm({ ...form, autoPriceSymbol: e.target.value })}
+                >
+                  <option value="">Chọn nhanh mã Việt Nam</option>
+                  {VN_STOCK_SYMBOL_PRESETS.map(sym => (
+                    <option key={sym} value={sym}>{sym}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="form-group">
+                <label className="form-label">Mã tự động (Symbol)</label>
+                <input
+                  className="input"
+                  placeholder="VD: FPT, VNM hoặc AAPL"
+                  value={form.autoPriceSymbol}
+                  onChange={e => setForm({ ...form, autoPriceSymbol: e.target.value.toUpperCase() })}
+                />
+              </div>
+            </>
           )}
           {form.autoPriceEnabled && form.type === "GOLD" && (
             <div className="form-group col-span-2">
@@ -687,10 +725,25 @@ function EditInvestmentModal({ inv, onClose, onUpdated }: { inv: any; onClose: (
           </label>
 
           {autoPriceEnabled && inv.type !== "GOLD" && (
-            <div className="form-group">
-              <label className="form-label">Mã tự động (Symbol)</label>
-              <input className="input" value={autoPriceSymbol} onChange={e => setAutoPriceSymbol(e.target.value)} placeholder="VD: FPT, AAPL, BTC/USD" />
-            </div>
+            <>
+              <div className="form-group">
+                <label className="form-label">Preset mã VN</label>
+                <select
+                  className="input"
+                  value={VN_STOCK_SYMBOL_PRESETS.includes(autoPriceSymbol.toUpperCase()) ? autoPriceSymbol.toUpperCase() : ""}
+                  onChange={e => setAutoPriceSymbol(e.target.value)}
+                >
+                  <option value="">Chọn nhanh mã Việt Nam</option>
+                  {VN_STOCK_SYMBOL_PRESETS.map(sym => (
+                    <option key={sym} value={sym}>{sym}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="form-group">
+                <label className="form-label">Mã tự động (Symbol)</label>
+                <input className="input" value={autoPriceSymbol} onChange={e => setAutoPriceSymbol(e.target.value.toUpperCase())} placeholder="VD: FPT, AAPL, BTC/USD" />
+              </div>
+            </>
           )}
 
           {autoPriceEnabled && inv.type === "GOLD" && (
