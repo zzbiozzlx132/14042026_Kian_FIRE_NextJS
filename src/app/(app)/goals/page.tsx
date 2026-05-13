@@ -38,7 +38,17 @@ interface ProjectionData {
   fireNumber: number;
   fireProgress: number;
   yearsToFire: number;
+  fireTargetYears: number;
+  requiredMonthlyInvest: number;
+  requiredAnnualInvest: number;
+  investGapMonthly: number;
   totalNetWorth: number;
+  emergencyFundCurrent: number;
+  emergencyFundMinTarget: number;
+  emergencyFundMaxTarget: number;
+  emergencyFundGapMin: number;
+  emergencyFundGapMax: number;
+  emergencyFundRecommendedMonthly: number;
   fireScenarios: FireScenario[];
   insights: Insight[];
   projections: Projection[];
@@ -60,7 +70,10 @@ export default function GoalsPage() {
     totalInvested: 0, totalCurrentValue: 0, totalPnL: 0, returnPct: 0,
     expectedReturnPct: 10, inflationPct: 3, savingsRate: 0,
     avgMonthlyIncome: 0, avgMonthlyExpense: 0, avgMonthlySavings: 0,
-    fireNumber: 0, fireProgress: 0, yearsToFire: -1, totalNetWorth: 0,
+    fireNumber: 0, fireProgress: 0, yearsToFire: -1, fireTargetYears: 13,
+    requiredMonthlyInvest: 0, requiredAnnualInvest: 0, investGapMonthly: 0,
+    totalNetWorth: 0, emergencyFundCurrent: 0, emergencyFundMinTarget: 0, emergencyFundMaxTarget: 0,
+    emergencyFundGapMin: 0, emergencyFundGapMax: 0, emergencyFundRecommendedMonthly: 0,
     fireScenarios: [], insights: [], projections: [], investmentCount: 0,
   };
 
@@ -237,6 +250,64 @@ export default function GoalsPage() {
             <span className="text-[var(--text-muted)]">Thu nhập TB/tháng:</span>
             <span className="font-bold text-[var(--success)]">{fmtMoney(d.avgMonthlyIncome)}</span>
           </div>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-8">
+        <div className="card">
+          <div className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider mb-2">Kế hoạch đầu tư để đạt FIRE</div>
+          <div className="text-sm text-[var(--text-muted)] mb-3">
+            Mốc mục tiêu: {d.fireTargetYears} năm (theo tuổi hiện tại → tuổi FIRE mục tiêu)
+          </div>
+          <div className="space-y-2 text-sm">
+            <div className="flex items-center justify-between">
+              <span className="text-[var(--text-muted)]">Cần đầu tư mỗi tháng</span>
+              <span className="font-bold text-[var(--accent)]">{fmtMoney(d.requiredMonthlyInvest)}</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-[var(--text-muted)]">Cần đầu tư mỗi năm</span>
+              <span className="font-bold">{fmtMoney(d.requiredAnnualInvest)}</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-[var(--text-muted)]">Đang tiết kiệm thực tế/tháng</span>
+              <span className="font-bold text-[var(--success)]">{fmtMoney(d.avgMonthlySavings)}</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-[var(--text-muted)]">Thiếu thêm để đạt kế hoạch</span>
+              <span className={`font-bold ${d.investGapMonthly > 0 ? "text-[var(--danger)]" : "text-[var(--success)]"}`}>
+                {d.investGapMonthly > 0 ? fmtMoney(d.investGapMonthly) : "Đã đạt"}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <div className="card">
+          <div className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider mb-2">Quỹ dự phòng 6–12 tháng</div>
+          <div className="space-y-2 text-sm">
+            <div className="flex items-center justify-between">
+              <span className="text-[var(--text-muted)]">Hiện có</span>
+              <span className="font-bold">{fmtMoney(d.emergencyFundCurrent)}</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-[var(--text-muted)]">Mục tiêu tối thiểu (6 tháng)</span>
+              <span className="font-bold">{fmtMoney(d.emergencyFundMinTarget)}</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-[var(--text-muted)]">Mục tiêu an toàn (12 tháng)</span>
+              <span className="font-bold">{fmtMoney(d.emergencyFundMaxTarget)}</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-[var(--text-muted)]">Còn thiếu mốc 6 tháng</span>
+              <span className={`font-bold ${d.emergencyFundGapMin > 0 ? "text-[var(--danger)]" : "text-[var(--success)]"}`}>
+                {d.emergencyFundGapMin > 0 ? fmtMoney(d.emergencyFundGapMin) : "Đã đủ"}
+              </span>
+            </div>
+          </div>
+          {d.emergencyFundGapMin > 0 && (
+            <div className="mt-3 text-xs text-[var(--text-muted)]">
+              Gợi ý: trích khoảng <span className="font-bold text-[var(--accent)]">{fmtMoney(d.emergencyFundRecommendedMonthly)}</span>/tháng để hoàn thành quỹ 6 tháng trong 12 tháng tới.
+            </div>
+          )}
         </div>
       </div>
 

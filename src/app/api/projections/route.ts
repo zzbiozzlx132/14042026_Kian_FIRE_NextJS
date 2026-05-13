@@ -36,6 +36,8 @@ export async function GET() {
     const settings = await prisma.lifePlanSettings.findFirst();
     const expectedReturnPct = settings?.expectedReturnPct || 10;
     const inflationPct = settings?.inflationPct || 3;
+    const currentAge = settings?.currentAge || 27;
+    const targetAge = settings?.targetAge || 40;
 
     // ═══ 3. MONTHLY INCOME/EXPENSE (last 6 months for accuracy) ═══
     const sixMonthsAgo = new Date();
@@ -120,6 +122,38 @@ export async function GET() {
         }
       }
     }
+
+    const fireTargetYears = Math.max(1, targetAge - currentAge);
+
+    function requiredMonthlyContributionForYears(targetYears: number): number {
+      if (fireNumber <= 0 || targetYears <= 0) return 0;
+      const target = fireNumber * Math.pow(1 + inflationPct / 100, targetYears);
+      const n = targetYears * 12;
+      const principal = Math.max(0, totalNetWorth);
+
+      if (monthlyRate <= 0) {
+        return Math.max(0, (target - principal) / n);
+      }
+
+      const growthFactor = Math.pow(1 + monthlyRate, n);
+      const principalFuture = principal * growthFactor;
+      if (principalFuture >= target) return 0;
+
+      const pmt = ((target - principalFuture) * monthlyRate) / (growthFactor - 1);
+      return Math.max(0, pmt);
+    }
+
+    const requiredMonthlyInvest = requiredMonthlyContributionForYears(fireTargetYears);
+    const requiredAnnualInvest = requiredMonthlyInvest * 12;
+    const investGapMonthly = Math.max(0, requiredMonthlyInvest - avgMonthlySavings);
+
+    // Emergency fund 6-12 months
+    const emergencyFundCurrent = totalCash;
+    const emergencyFundMinTarget = avgMonthlyExpense * 6;
+    const emergencyFundMaxTarget = avgMonthlyExpense * 12;
+    const emergencyFundGapMin = Math.max(0, emergencyFundMinTarget - emergencyFundCurrent);
+    const emergencyFundGapMax = Math.max(0, emergencyFundMaxTarget - emergencyFundCurrent);
+    const emergencyFundRecommendedMonthly = emergencyFundGapMin > 0 ? (emergencyFundGapMin / 12) : 0;
 
     // Required return rate to FIRE in X years
     function requiredReturnForFire(targetYears: number): number {
@@ -282,7 +316,17 @@ export async function GET() {
       fireNumber: Math.round(fireNumber),
       fireProgress: Math.round(fireProgress * 10) / 10,
       yearsToFire,
+      fireTargetYears,
+      requiredMonthlyInvest: Math.round(requiredMonthlyInvest),
+      requiredAnnualInvest: Math.round(requiredAnnualInvest),
+      investGapMonthly: Math.round(investGapMonthly),
       totalNetWorth: Math.round(totalNetWorth),
+      emergencyFundCurrent: Math.round(emergencyFundCurrent),
+      emergencyFundMinTarget: Math.round(emergencyFundMinTarget),
+      emergencyFundMaxTarget: Math.round(emergencyFundMaxTarget),
+      emergencyFundGapMin: Math.round(emergencyFundGapMin),
+      emergencyFundGapMax: Math.round(emergencyFundGapMax),
+      emergencyFundRecommendedMonthly: Math.round(emergencyFundRecommendedMonthly),
       fireScenarios,
       // Insights
       insights,
@@ -297,7 +341,10 @@ export async function GET() {
       totalInvested: 0, totalCurrentValue: 0, totalPnL: 0, returnPct: 0,
       investmentCount: 0, savingsRate: 0, avgMonthlyIncome: 0, avgMonthlyExpense: 0,
       avgMonthlySavings: 0, fireNumber: 0, fireProgress: 0, yearsToFire: -1,
-      totalNetWorth: 0, fireScenarios: [], insights: [], expectedReturnPct: 10,
+      fireTargetYears: 13, requiredMonthlyInvest: 0, requiredAnnualInvest: 0, investGapMonthly: 0,
+      totalNetWorth: 0, emergencyFundCurrent: 0, emergencyFundMinTarget: 0, emergencyFundMaxTarget: 0,
+      emergencyFundGapMin: 0, emergencyFundGapMax: 0, emergencyFundRecommendedMonthly: 0,
+      fireScenarios: [], insights: [], expectedReturnPct: 10,
       inflationPct: 3, projections: [],
     });
   }
