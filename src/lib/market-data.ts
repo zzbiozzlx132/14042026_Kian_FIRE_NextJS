@@ -35,6 +35,51 @@ async function fetchTwelveLatestPrice(symbol: string, apiKey: string): Promise<n
   return price;
 }
 
+async function fetchTwelveLatestPriceWithQuery(query: URLSearchParams): Promise<number> {
+  const url = `https://api.twelvedata.com/price?${query.toString()}`;
+  const symbol = query.get("symbol") || "UNKNOWN";
+  const res = await fetch(url, { method: "GET", cache: "no-store" });
+  if (!res.ok) {
+    throw new Error(`TwelveData HTTP ${res.status}`);
+  }
+  const data = await res.json();
+  if (data?.status === "error" || data?.code) {
+    throw new Error(data?.message || `Không lấy được giá cho ${symbol}`);
+  }
+  const price = toNum(data?.price);
+  if (price <= 0) {
+    throw new Error(`Giá trả về không hợp lệ cho ${symbol}`);
+  }
+  return price;
+}
+
+function isLikelyVietnamTicker(symbol: string): boolean {
+  const s = symbol.trim().toUpperCase();
+  return /^[A-Z]{2,4}$/.test(s);
+}
+
+async function fetchVietnamStockPrice(symbol: string, apiKey: string): Promise<number> {
+  const exchanges = ["HOSE", "HNX", "UPCOM"];
+  const errors: string[] = [];
+
+  for (const exchange of exchanges) {
+    const q = new URLSearchParams({
+      apikey: apiKey,
+      symbol: symbol.toUpperCase(),
+      country: "Vietnam",
+      exchange,
+      type: "Common Stock",
+    });
+    try {
+      return await fetchTwelveLatestPriceWithQuery(q);
+    } catch (e: any) {
+      errors.push(`${exchange}:${e?.message || "error"}`);
+    }
+  }
+
+  throw new Error(`Không tìm thấy mã ${symbol} ở HOSE/HNX/UPCOM (${errors.join(" | ")})`);
+}
+
 async function getGoldVndPerChi(settings: MarketSettings, apiKey: string): Promise<number> {
   const goldSymbol = (settings.goldPrimarySymbol || "XAU/USD").trim();
   const fxSymbol = (settings.goldFxSymbol || "USD/VND").trim();
@@ -65,7 +110,18 @@ async function resolveAutoPrice(inv: any, settings: MarketSettings, apiKey: stri
     throw new Error("Thiếu mã tự động (symbol)");
   }
 
-  const price = await fetchTwelveLatestPrice(symbol, apiKey);
+  let price = 0;
+  if (inv.type === "STOCK" && isLikelyVietnamTicker(symbol)) {
+    try {
+      price = await fetchVietnamStockPrice(symbol, apiKey);
+    } catch {
+      // fallback to generic symbol fetch if VN lookup does not resolve
+      price = await fetchTwelveLatestPrice(symbol, apiKey);
+    }
+  } else {
+    price = await fetchTwelveLatestPrice(symbol, apiKey);
+  }
+
   return { price: Math.round(price), sourceMeta: symbol };
 }
 

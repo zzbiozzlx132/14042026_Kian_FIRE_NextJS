@@ -25,6 +25,7 @@ const VN_STOCK_SYMBOL_PRESETS = [
   "TCB",
   "MBB",
   "SSI",
+  "TLG",
   "VND",
   "MWG",
   "VIC",
