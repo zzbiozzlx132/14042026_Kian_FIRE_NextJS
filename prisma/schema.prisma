@@ -322,6 +322,7 @@ model RecurringTransaction {
 // ═══════════════════════════════════════
 model LifePlanSettings {
   id                   String  @id @default("default")
+  birthYear            Int?
   currentAge           Int     @default(27)
   targetAge            Int     @default(40)
   targetMonthlyExpense Float   @default(0)

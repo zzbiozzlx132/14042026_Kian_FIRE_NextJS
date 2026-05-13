@@ -18,6 +18,7 @@ export async function PATCH(req: Request) {
 
   const body = await req.json().catch(() => ({}));
   const updated = await updateFireSettings({
+    birthYear: body.birthYear,
     currentAge: body.currentAge,
     targetAge: body.targetAge,
     expectedReturnPct: body.expectedReturnPct,

@@ -4,6 +4,7 @@ import { prisma } from "./prisma";
 export type FireProjectionMode = "expected" | "actual";
 
 type FireSettingsInput = {
+  birthYear?: number | null;
   currentAge?: number;
   targetAge?: number;
   expectedReturnPct?: number;
@@ -37,6 +38,7 @@ type BenchmarkSnapshot = {
 export type FirePlanOutput = {
   mode: FireProjectionMode;
   params: {
+    birthYear: number | null;
     currentAge: number;
     targetAge: number;
     fireTargetYears: number;
@@ -292,7 +294,7 @@ function computeYearsToFire(
   fireNumberToday: number,
 ): number {
   if (fireNumberToday <= 0) return 0;
-  const monthlyRate = annualReturn / 12;
+  const monthlyRate = Math.pow(1 + annualReturn, 1 / 12) - 1;
   let portfolio = Math.max(0, principal);
   let monthlyContribution = Math.max(0, monthlyContributionBase);
   for (let month = 1; month <= 600; month++) {
@@ -316,7 +318,7 @@ function computeRequiredMonthlyInvest(
   if (fireTargetYears <= 0 || fireNumberToday <= 0) return 0;
   const target = fireNumberToday * Math.pow(1 + annualInflation, fireTargetYears);
   const n = fireTargetYears * 12;
-  const monthlyRate = annualReturn / 12;
+  const monthlyRate = Math.pow(1 + annualReturn, 1 / 12) - 1;
   const basePrincipal = Math.max(0, principal);
 
   if (monthlyRate <= 0) {
@@ -361,7 +363,13 @@ function pickAnnualReturn(mode: FireProjectionMode, expectedPct: number, actualP
 
 export async function getFireSettings() {
   const settings = await ensureSettingsExists();
+  const currentYear = new Date().getFullYear();
+  const derivedAge = settings.birthYear && settings.birthYear > 1900
+    ? Math.max(18, currentYear - settings.birthYear)
+    : settings.currentAge;
   return {
+    birthYear: settings.birthYear,
+    derivedCurrentAge: derivedAge,
     currentAge: settings.currentAge,
     targetAge: settings.targetAge,
     expectedReturnPct: settings.expectedReturnPct,
@@ -382,6 +390,9 @@ export async function getFireSettings() {
 export async function updateFireSettings(input: FireSettingsInput) {
   await ensureSettingsExists();
   const updateData: any = {};
+  if (input.birthYear !== undefined) {
+    updateData.birthYear = input.birthYear === null ? null : Math.max(1900, Math.min(2100, Math.round(input.birthYear)));
+  }
   if (input.currentAge !== undefined) updateData.currentAge = Math.max(18, Math.min(90, Math.round(input.currentAge)));
   if (input.targetAge !== undefined) updateData.targetAge = Math.max(25, Math.min(100, Math.round(input.targetAge)));
   if (input.expectedReturnPct !== undefined) updateData.expectedReturnPct = clamp(safeNum(input.expectedReturnPct), -5, 40);
@@ -566,6 +577,10 @@ export async function computeFirePlan(mode: FireProjectionMode): Promise<FirePla
   }
 
   const targetMonthlyExpenseAtFire = settings.targetMonthlyExpense > 0 ? settings.targetMonthlyExpense : averages.avgExpense;
+  const currentYear = now.getFullYear();
+  const derivedCurrentAge = settings.birthYear && settings.birthYear > 1900
+    ? Math.max(18, currentYear - settings.birthYear)
+    : safeNum(settings.currentAge, 27);
   const swrPct = safeNum(settings.swrPct, 4);
   const swrRate = swrPct / 100;
   const fireNumber = swrRate > 0 ? (targetMonthlyExpenseAtFire * 12) / swrRate : targetMonthlyExpenseAtFire * 12 * 25;
@@ -584,7 +599,7 @@ export async function computeFirePlan(mode: FireProjectionMode): Promise<FirePla
     fireNumber,
   );
 
-  const fireTargetYears = Math.max(1, safeNum(settings.targetAge, 40) - safeNum(settings.currentAge, 27));
+  const fireTargetYears = Math.max(1, safeNum(settings.targetAge, 40) - derivedCurrentAge);
   const requiredMonthlyInvest = computeRequiredMonthlyInvest(
     investableNetWorth,
     fireTargetYears,
@@ -689,7 +704,8 @@ export async function computeFirePlan(mode: FireProjectionMode): Promise<FirePla
   return {
     mode,
     params: {
-      currentAge: safeNum(settings.currentAge, 27),
+      birthYear: settings.birthYear ?? null,
+      currentAge: derivedCurrentAge,
       targetAge: safeNum(settings.targetAge, 40),
       fireTargetYears,
       expectedReturnPct: safeNum(settings.expectedReturnPct, 10),
