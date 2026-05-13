@@ -21,15 +21,29 @@ const TELEGRAM_COMMANDS: TelegramCommand[] = [
 ];
 
 async function registerBotCommands(token: string) {
-  const body = {
+  const baseBody = {
     commands: TELEGRAM_COMMANDS,
-    scope: { type: "default" },
   };
-  await fetch(`https://api.telegram.org/bot${token}/setMyCommands`, {
+
+  const setDefault = await fetch(`https://api.telegram.org/bot${token}/setMyCommands`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
+    body: JSON.stringify({ ...baseBody, scope: { type: "default" } }),
   });
+  const setDefaultData = await setDefault.json().catch(() => ({}));
+  if (!setDefault.ok || !setDefaultData?.ok) {
+    throw new Error(setDefaultData?.description || "setMyCommands default failed");
+  }
+
+  const setPrivate = await fetch(`https://api.telegram.org/bot${token}/setMyCommands`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ ...baseBody, scope: { type: "all_private_chats" } }),
+  });
+  const setPrivateData = await setPrivate.json().catch(() => ({}));
+  if (!setPrivate.ok || !setPrivateData?.ok) {
+    throw new Error(setPrivateData?.description || "setMyCommands private failed");
+  }
 
   await fetch(`https://api.telegram.org/bot${token}/setMyDescription`, {
     method: "POST",
