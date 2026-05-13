@@ -688,23 +688,26 @@ function MiniStat({ label, value, hint, valueClass }: { label: string; value: st
       <div className="flex items-center gap-1 text-xs text-[var(--text-muted)] mb-1">
         <span>{label}</span>
         {hint ? (
-          <button
-            type="button"
-            onClick={() => setShowHint((v) => !v)}
-            className="inline-flex items-center text-[var(--text-muted)] hover:text-[var(--accent)] transition-colors"
-            aria-label={`Giải thích: ${label}`}
-            title={hint}
-          >
-            <CircleHelp size={14} />
-          </button>
+          <span className="relative inline-flex items-center group">
+            <button
+              type="button"
+              onClick={() => setShowHint((v) => !v)}
+              className="inline-flex items-center text-[var(--text-muted)] hover:text-[var(--accent)] transition-colors"
+              aria-label={`Giải thích: ${label}`}
+            >
+              <CircleHelp size={14} />
+            </button>
+            <span
+              className={`pointer-events-none absolute left-1/2 top-full z-30 mt-1 w-64 -translate-x-1/2 rounded-lg border border-[var(--border)] bg-[var(--bg-card)] px-2.5 py-2 text-[11px] font-normal leading-relaxed text-[var(--text-secondary)] shadow-lg transition-opacity ${
+                showHint ? "opacity-100" : "opacity-0 group-hover:opacity-100 group-focus-within:opacity-100"
+              }`}
+            >
+              {hint}
+            </span>
+          </span>
         ) : null}
       </div>
       <div className={`text-sm font-bold ${valueClass || ""}`}>{value}</div>
-      {hint && showHint ? (
-        <div className="mt-1.5 text-[11px] leading-relaxed text-[var(--text-secondary)]">
-          {hint}
-        </div>
-      ) : null}
     </div>
   );
 }
