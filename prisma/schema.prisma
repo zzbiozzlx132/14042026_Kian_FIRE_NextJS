@@ -361,6 +361,10 @@ model LifePlanSettings {
   goldPrimarySymbol       String             @default("XAU/USD")
   goldFxSymbol            String             @default("USD/VND")
   goldPremiumPct          Float              @default(0)
+  googleClientId          String?
+  googleClientSecret      String?
+  googleProjectId         String?
+  googleConfigUpdatedAt   DateTime?
 
   fireAllocationBuckets FireAllocationBucket[]
 }

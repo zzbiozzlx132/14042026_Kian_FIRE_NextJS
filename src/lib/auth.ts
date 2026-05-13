@@ -1,4 +1,4 @@
-import NextAuth from "next-auth";
+import NextAuth, { type NextAuthConfig } from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import Google from "next-auth/providers/google";
 import { prisma } from "@/lib/prisma";
@@ -49,8 +49,8 @@ async function delayMs(ms: number) {
   await new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-const providers: any[] = [
-  Credentials({
+function buildCredentialsProvider() {
+  return Credentials({
     credentials: {
       login: { label: "Email / Tên đăng nhập / SĐT", type: "text" },
       password: { label: "Password", type: "password" },
@@ -136,78 +136,105 @@ const providers: any[] = [
         return null;
       }
     },
-  }),
-];
-
-if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
-  providers.push(
-    Google({
-      clientId: process.env.GOOGLE_CLIENT_ID,
-      clientSecret: process.env.GOOGLE_CLIENT_SECRET,
-      authorization: { params: { prompt: "select_account" } },
-    }),
-  );
+  });
 }
 
-export const { handlers, signIn, signOut, auth } = NextAuth({
-  providers,
-  callbacks: {
-    async signIn({ user, account }) {
-      if (account?.provider !== "google") return true;
-      const email = String(user.email || "").trim().toLowerCase();
-      if (!email) return false;
-      const name = String(user.name || email.split("@")[0] || "User").trim();
+async function resolveGoogleCredentials() {
+  const envClientId = (process.env.GOOGLE_CLIENT_ID || "").trim();
+  const envClientSecret = (process.env.GOOGLE_CLIENT_SECRET || "").trim();
+  if (envClientId && envClientSecret) {
+    return { clientId: envClientId, clientSecret: envClientSecret };
+  }
 
-      const existing = await prisma.user.findUnique({ where: { email } });
-      if (!existing) {
-        const randomPass = `${Date.now()}_${Math.random().toString(36).slice(2, 12)}`;
-        const hashed = await bcrypt.hash(randomPass, 10);
-        await prisma.user.create({
-          data: {
-            email,
-            name,
-            password: hashed,
-            role: "USER",
-          },
-        });
-      } else if (!existing.name && name) {
-        await prisma.user.update({ where: { id: existing.id }, data: { name } });
-      }
-      return true;
-    },
-    async jwt({ token, user }) {
-      if (user) {
-        if (user.id) token.id = user.id;
-        if ((user as { role?: string }).role) {
-          token.role = (user as { role?: string }).role;
-        }
-      }
+  try {
+    const settings = await prisma.lifePlanSettings.findUnique({
+      where: { id: "default" },
+      select: { googleClientId: true, googleClientSecret: true },
+    });
+    const clientId = (settings?.googleClientId || "").trim();
+    const clientSecret = (settings?.googleClientSecret || "").trim();
+    if (clientId && clientSecret) return { clientId, clientSecret };
+  } catch (error) {
+    console.error("Auth Google settings lookup error:", error);
+  }
+  return null;
+}
 
-      if ((!token.id || !token.role) && token.email) {
-        const dbUser = await prisma.user.findUnique({
-          where: { email: String(token.email).toLowerCase() },
-          select: { id: true, role: true },
-        });
-        if (dbUser) {
-          token.id = dbUser.id;
-          token.role = dbUser.role;
+async function buildAuthConfig(): Promise<NextAuthConfig> {
+  const providers: NextAuthConfig["providers"] = [buildCredentialsProvider()];
+  const google = await resolveGoogleCredentials();
+  if (google) {
+    providers.push(
+      Google({
+        clientId: google.clientId,
+        clientSecret: google.clientSecret,
+        authorization: { params: { prompt: "select_account" } },
+      }),
+    );
+  }
+
+  return {
+    providers,
+    callbacks: {
+      async signIn({ user, account }) {
+        if (account?.provider !== "google") return true;
+        const email = String(user.email || "").trim().toLowerCase();
+        if (!email) return false;
+        const name = String(user.name || email.split("@")[0] || "User").trim();
+
+        const existing = await prisma.user.findUnique({ where: { email } });
+        if (!existing) {
+          const randomPass = `${Date.now()}_${Math.random().toString(36).slice(2, 12)}`;
+          const hashed = await bcrypt.hash(randomPass, 10);
+          await prisma.user.create({
+            data: {
+              email,
+              name,
+              password: hashed,
+              role: "USER",
+            },
+          });
+        } else if (!existing.name && name) {
+          await prisma.user.update({ where: { id: existing.id }, data: { name } });
         }
-      }
-      return token;
+        return true;
+      },
+      async jwt({ token, user }) {
+        if (user) {
+          if (user.id) token.id = user.id;
+          if ((user as { role?: string }).role) {
+            token.role = (user as { role?: string }).role;
+          }
+        }
+
+        if ((!token.id || !token.role) && token.email) {
+          const dbUser = await prisma.user.findUnique({
+            where: { email: String(token.email).toLowerCase() },
+            select: { id: true, role: true },
+          });
+          if (dbUser) {
+            token.id = dbUser.id;
+            token.role = dbUser.role;
+          }
+        }
+        return token;
+      },
+      async session({ session, token }) {
+        if (session.user) {
+          session.user.id = token.id as string;
+          (session.user as unknown as { role: string }).role = token.role as string;
+        }
+        return session;
+      },
     },
-    async session({ session, token }) {
-      if (session.user) {
-        session.user.id = token.id as string;
-        (session.user as unknown as { role: string }).role = token.role as string;
-      }
-      return session;
+    pages: {
+      signIn: "/login",
     },
-  },
-  pages: {
-    signIn: "/login",
-  },
-  session: {
-    strategy: "jwt",
-  },
-  secret: process.env.AUTH_SECRET,
-});
+    session: {
+      strategy: "jwt",
+    },
+    secret: process.env.AUTH_SECRET,
+  };
+}
+
+export const { handlers, signIn, signOut, auth } = NextAuth(() => buildAuthConfig());

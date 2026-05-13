@@ -17,6 +17,7 @@ export default function SettingsPage() {
   const tabs = [
     { id: "users", label: "Thành viên", icon: Users, adminOnly: true },
     { id: "categories", label: "Hạng mục & Từ khoá", icon: List, adminOnly: true },
+    { id: "login", label: "Đăng nhập", icon: Key, adminOnly: true },
     { id: "market", label: "Giá thị trường", icon: RefreshCw, adminOnly: true },
     { id: "profile", label: "Tài khoản", icon: UserCircle },
     { id: "telegram", label: "Telegram", icon: Send },
@@ -61,6 +62,7 @@ export default function SettingsPage() {
         <div className="md:col-span-3">
           {activeTab === "users" && <UsersPanel />}
           {activeTab === "categories" && <CategoriesPanel />}
+          {activeTab === "login" && <LoginConfigPanel />}
           {activeTab === "market" && <MarketDataPanel />}
           {activeTab === "profile" && <ProfilePanel />}
           {activeTab === "telegram" && <TelegramPanel />}
@@ -926,6 +928,172 @@ function ProfilePanel() {
             )}
           </div>
         )}
+      </div>
+    </div>
+  );
+}
+
+/* ═══════ LOGIN CONFIG PANEL ═══════ */
+function LoginConfigPanel() {
+  const [loading, setLoading] = useState(true);
+  const [uploading, setUploading] = useState(false);
+  const [removing, setRemoving] = useState(false);
+  const [info, setInfo] = useState({
+    enabled: false,
+    source: "NONE",
+    clientIdMasked: "",
+    projectId: "",
+    updatedAt: "",
+    callbackUrl: "",
+  });
+  const [lastRedirectUris, setLastRedirectUris] = useState<string[]>([]);
+  const [fileName, setFileName] = useState("");
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    const res = await fetch("/api/settings/google-auth");
+    const data = await res.json().catch(() => ({}));
+    if (res.ok) {
+      setInfo({
+        enabled: !!data.enabled,
+        source: data.source || "NONE",
+        clientIdMasked: data.clientIdMasked || "",
+        projectId: data.projectId || "",
+        updatedAt: data.updatedAt || "",
+        callbackUrl: data.callbackUrl || "",
+      });
+    } else {
+      toast.error(data.error || "Không tải được cấu hình Google login");
+    }
+    setLoading(false);
+  }, []);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  const handleUpload = async (file: File | null) => {
+    if (!file) return;
+    if (!file.name.toLowerCase().endsWith(".json")) {
+      toast.error("Chỉ nhận file .json");
+      return;
+    }
+
+    setUploading(true);
+    const fd = new FormData();
+    fd.append("file", file);
+    const res = await fetch("/api/settings/google-auth", { method: "POST", body: fd });
+    const data = await res.json().catch(() => ({}));
+    if (res.ok) {
+      toast.success("Đã lưu cấu hình Google từ file JSON");
+      setFileName(file.name);
+      setLastRedirectUris(Array.isArray(data.redirectUris) ? data.redirectUris : []);
+      await load();
+    } else {
+      toast.error(data.error || "Upload thất bại");
+    }
+    setUploading(false);
+  };
+
+  const handleRemove = async () => {
+    setRemoving(true);
+    const res = await fetch("/api/settings/google-auth", { method: "DELETE" });
+    const data = await res.json().catch(() => ({}));
+    if (res.ok) {
+      toast.success("Đã tắt Google login từ cấu hình JSON");
+      setFileName("");
+      setLastRedirectUris([]);
+      await load();
+    } else {
+      toast.error(data.error || "Không thể xoá cấu hình");
+    }
+    setRemoving(false);
+  };
+
+  if (loading) return <div className="card p-8"><div className="skeleton h-40 w-full"></div></div>;
+
+  const updatedLabel = info.updatedAt
+    ? new Date(info.updatedAt).toLocaleString("vi-VN")
+    : "Chưa có";
+
+  return (
+    <div className="space-y-6">
+      <div className="card p-6">
+        <div className="flex items-center gap-2 mb-1">
+          <Key size={16} className="text-[var(--accent)]" />
+          <h3 className="section-label mb-0">Đăng nhập Google (Upload JSON)</h3>
+        </div>
+        <p className="text-xs text-[var(--text-muted)] mb-5">
+          Upload trực tiếp file JSON OAuth client từ Google Cloud. Hệ thống tự lấy client id/secret, không cần nhập tay.
+        </p>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4">
+          <div className="p-3 rounded-xl border border-[var(--border)] bg-[var(--bg-input)]">
+            <div className="text-xs text-[var(--text-muted)]">Trạng thái</div>
+            <div className={`text-sm font-semibold mt-1 ${info.enabled ? "text-green-600" : "text-[var(--text-secondary)]"}`}>
+              {info.enabled ? "Đã bật Google login" : "Chưa bật Google login"}
+            </div>
+          </div>
+          <div className="p-3 rounded-xl border border-[var(--border)] bg-[var(--bg-input)]">
+            <div className="text-xs text-[var(--text-muted)]">Nguồn cấu hình</div>
+            <div className="text-sm font-semibold mt-1">{info.source}</div>
+          </div>
+          <div className="p-3 rounded-xl border border-[var(--border)] bg-[var(--bg-input)]">
+            <div className="text-xs text-[var(--text-muted)]">Client ID</div>
+            <div className="text-sm font-semibold mt-1">{info.clientIdMasked || "Chưa có"}</div>
+          </div>
+          <div className="p-3 rounded-xl border border-[var(--border)] bg-[var(--bg-input)]">
+            <div className="text-xs text-[var(--text-muted)]">Project</div>
+            <div className="text-sm font-semibold mt-1">{info.projectId || "Chưa có"}</div>
+          </div>
+          <div className="p-3 rounded-xl border border-[var(--border)] bg-[var(--bg-input)] md:col-span-2">
+            <div className="text-xs text-[var(--text-muted)]">Callback URL cần có trong Google Console</div>
+            <div className="text-sm font-semibold mt-1 break-all">{info.callbackUrl || "Chưa xác định"}</div>
+          </div>
+        </div>
+
+        <div className="p-3 rounded-xl border border-[var(--border)] bg-[var(--bg-input)] mb-4">
+          <label className="form-label">Upload file OAuth JSON</label>
+          <input
+            type="file"
+            accept=".json,application/json"
+            className="input"
+            onChange={(e) => handleUpload(e.target.files?.[0] || null)}
+            disabled={uploading}
+          />
+          <div className="text-xs text-[var(--text-muted)] mt-2">
+            {fileName ? `File gần nhất: ${fileName}` : "Chưa upload file nào trong phiên này."}
+          </div>
+          <div className="text-xs text-[var(--text-muted)] mt-1">Cập nhật gần nhất: {updatedLabel}</div>
+        </div>
+
+        {lastRedirectUris.length > 0 && (
+          <div className="p-3 rounded-xl border border-[var(--border)] bg-[var(--bg-input)] mb-4">
+            <div className="text-xs text-[var(--text-muted)] mb-1">Redirect URI trong file JSON vừa upload</div>
+            <div className="text-sm space-y-1">
+              {lastRedirectUris.map((uri) => (
+                <div key={uri} className="break-all">{uri}</div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        <div className="flex gap-3">
+          <button
+            onClick={load}
+            className="btn btn-ghost border border-[var(--border)] flex-1"
+            disabled={loading || uploading}
+          >
+            {loading ? "Đang tải..." : "Tải lại trạng thái"}
+          </button>
+          <button
+            onClick={handleRemove}
+            className="btn btn-danger flex-1"
+            disabled={removing}
+          >
+            {removing ? "Đang tắt..." : "Tắt Google login"}
+          </button>
+        </div>
       </div>
     </div>
   );
