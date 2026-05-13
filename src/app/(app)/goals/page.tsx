@@ -681,17 +681,30 @@ function Row({ label, value, strong, valueClass }: { label: string; value: strin
 }
 
 function MiniStat({ label, value, hint, valueClass }: { label: string; value: string; hint?: string; valueClass?: string }) {
+  const [showHint, setShowHint] = useState(false);
+
   return (
     <div className="p-3 rounded-xl border border-[var(--border)] bg-[var(--bg-input)]">
       <div className="flex items-center gap-1 text-xs text-[var(--text-muted)] mb-1">
         <span>{label}</span>
         {hint ? (
-          <span title={hint} className="inline-flex items-center text-[var(--text-muted)] cursor-help">
-            <CircleHelp size={13} />
-          </span>
+          <button
+            type="button"
+            onClick={() => setShowHint((v) => !v)}
+            className="inline-flex items-center text-[var(--text-muted)] hover:text-[var(--accent)] transition-colors"
+            aria-label={`Giải thích: ${label}`}
+            title={hint}
+          >
+            <CircleHelp size={14} />
+          </button>
         ) : null}
       </div>
       <div className={`text-sm font-bold ${valueClass || ""}`}>{value}</div>
+      {hint && showHint ? (
+        <div className="mt-1.5 text-[11px] leading-relaxed text-[var(--text-secondary)]">
+          {hint}
+        </div>
+      ) : null}
     </div>
   );
 }
