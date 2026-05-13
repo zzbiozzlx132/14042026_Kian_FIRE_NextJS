@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react
 import { useSession } from "next-auth/react";
 import { fmtMoney } from "@/lib/utils";
 import { toast } from "sonner";
-import { AlertTriangle, Calculator, CheckCircle2, CircleHelp, Flame, LineChart, Percent, RefreshCw, Target, TrendingUp } from "lucide-react";
+import { AlertTriangle, Calculator, CheckCircle2, CircleHelp, Flame, LineChart, Percent, RefreshCw, Settings2, Target, TrendingUp, X } from "lucide-react";
 
 type PlanData = {
   mode: "expected" | "actual";
@@ -149,6 +149,7 @@ export default function GoalsPage() {
   const [loading, setLoading] = useState(true);
   const [configLoading, setConfigLoading] = useState(true);
   const [savingConfig, setSavingConfig] = useState(false);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [data, setData] = useState<PlanData>(EMPTY_PLAN);
   const [form, setForm] = useState<FireSettingsForm>({
     birthYear: currentYear - 27,
@@ -324,147 +325,14 @@ export default function GoalsPage() {
           <p className="text-sm text-[var(--text-muted)]">Lộ trình hành động tháng + checkpoint tuần để tăng tốc đến tự do tài chính.</p>
         </div>
         <div className="flex items-center gap-2">
+          <button onClick={() => setIsSettingsOpen(true)} className="btn btn-ghost border border-[var(--border)] text-sm">
+            <Settings2 size={14} />
+            <span>Cài đặt FIRE</span>
+          </button>
           <button onClick={() => setMode("expected")} className={`btn text-sm ${mode === "expected" ? "btn-primary" : "btn-ghost border border-[var(--border)]"}`}>Expected</button>
           <button onClick={() => setMode("actual")} className={`btn text-sm ${mode === "actual" ? "btn-primary" : "btn-ghost border border-[var(--border)]"}`}>Actual (TWR)</button>
           <button onClick={() => { loadPlan(mode); loadConfig(); }} className="btn btn-ghost border border-[var(--border)] text-sm"><RefreshCw size={14} /></button>
         </div>
-      </div>
-
-      <div className="card p-6">
-        <div className="flex items-center gap-2 mb-1">
-          <Flame size={16} className="text-[var(--accent)]" />
-          <h3 className="section-label mb-0">FIRE Control Settings</h3>
-        </div>
-        <p className="text-xs text-[var(--text-muted)] mb-4">
-          Đặt 1 lần theo năm sinh + mục tiêu FIRE. Hệ thống tự tính tuổi hiện tại mỗi năm, không cần bạn cập nhật tuổi thủ công.
-        </p>
-        {configLoading ? <Skeleton /> : (
-          <div className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              <div className="form-group">
-                <label className="form-label">Năm sinh</label>
-                <input
-                  type="number"
-                  className="input"
-                  value={form.birthYear}
-                  onChange={(e) => setForm({ ...form, birthYear: Number(e.target.value) || currentYear - 27 })}
-                  disabled={!isAdmin}
-                />
-              </div>
-              <div className="form-group">
-                <label className="form-label">Tuổi hiện tại (tự tính)</label>
-                <input type="number" className="input" value={derivedAgeFromBirthYear} disabled />
-              </div>
-              <div className="form-group">
-                <label className="form-label">Tuổi mục tiêu FIRE</label>
-                <input type="number" className="input" value={form.targetAge} onChange={(e) => setForm({ ...form, targetAge: Number(e.target.value) || 40 })} disabled={!isAdmin} />
-              </div>
-              <div className="form-group">
-                <label className="form-label">Lãi suất kỳ vọng (%/năm)</label>
-                <input type="number" step="0.1" className="input" value={form.expectedReturnPct} onChange={(e) => setForm({ ...form, expectedReturnPct: Number(e.target.value) || 10 })} disabled={!isAdmin} />
-              </div>
-              <div className="form-group">
-                <label className="form-label">Lạm phát (%/năm)</label>
-                <input type="number" step="0.1" className="input" value={form.inflationPct} onChange={(e) => setForm({ ...form, inflationPct: Number(e.target.value) || 3 })} disabled={!isAdmin} />
-              </div>
-              <div className="form-group">
-                <label className="form-label">SWR (%/năm)</label>
-                <input type="number" step="0.1" className="input" value={form.swrPct} onChange={(e) => setForm({ ...form, swrPct: Number(e.target.value) || 4 })} disabled={!isAdmin} />
-              </div>
-              <div className="form-group">
-                <label className="form-label">Tăng thu nhập (%/năm)</label>
-                <input type="number" step="0.1" className="input" value={form.salaryGrowthPct} onChange={(e) => setForm({ ...form, salaryGrowthPct: Number(e.target.value) || 5 })} disabled={!isAdmin} />
-              </div>
-              <div className="form-group">
-                <label className="form-label">Chi tiêu mục tiêu khi FIRE (VNĐ/tháng)</label>
-                <input type="number" className="input" value={form.targetMonthlyExpenseAtFire} onChange={(e) => setForm({ ...form, targetMonthlyExpenseAtFire: Number(e.target.value) || 0 })} disabled={!isAdmin} />
-              </div>
-              <div className="form-group">
-                <label className="form-label">Mục tiêu đầu tư tối thiểu (VNĐ/tháng)</label>
-                <input type="number" className="input" value={form.plannedMonthlyInvest} onChange={(e) => setForm({ ...form, plannedMonthlyInvest: Number(e.target.value) || 0 })} disabled={!isAdmin} />
-              </div>
-              <div className="form-group">
-                <label className="form-label">Khẩu vị rủi ro</label>
-                <select className="input" value={form.riskProfile} onChange={(e) => setForm({ ...form, riskProfile: e.target.value })} disabled={!isAdmin}>
-                  <option value="capital_preservation">Bảo toàn vốn</option>
-                  <option value="disciplined_growth">Tăng trưởng kỷ luật</option>
-                  <option value="aggressive">Tấn công mạnh</option>
-                </select>
-              </div>
-              <div className="form-group">
-                <label className="form-label">Chế độ mục tiêu</label>
-                <select className="input" value={form.objectiveMode} onChange={(e) => setForm({ ...form, objectiveMode: e.target.value })} disabled={!isAdmin}>
-                  <option value="fast_but_safe">Nhanh nhưng an toàn</option>
-                  <option value="balanced">Cân bằng</option>
-                  <option value="max_speed">Nhanh nhất</option>
-                </select>
-              </div>
-              <div className="form-group">
-                <label className="form-label">Kịch bản khi trượt KPI</label>
-                <select className="input" value={form.missedTargetPolicy} onChange={(e) => setForm({ ...form, missedTargetPolicy: e.target.value })} disabled={!isAdmin}>
-                  <option value="cut_expense_first">Cắt chi trước</option>
-                  <option value="invest_more_first">Tăng đầu tư bù trước</option>
-                  <option value="extend_timeline_first">Giãn timeline trước</option>
-                </select>
-              </div>
-              <div className="form-group">
-                <label className="form-label">Nguồn lãi suất gửi</label>
-                <select className="input" value={form.depositRateSource} onChange={(e) => setForm({ ...form, depositRateSource: e.target.value })} disabled={!isAdmin}>
-                  <option value="worldbank_vn">Auto (WorldBank VN)</option>
-                  <option value="manual">Nhập tay</option>
-                </select>
-              </div>
-              <div className="form-group">
-                <label className="form-label">Lãi suất gửi nhập tay (%/năm)</label>
-                <input type="number" step="0.1" className="input" value={form.depositRateManual} onChange={(e) => setForm({ ...form, depositRateManual: Number(e.target.value) || 0 })} disabled={!isAdmin} />
-              </div>
-            </div>
-
-            <div className="pt-1 space-y-2">
-              <h4 className="text-sm font-semibold">Phân bổ thu nhập / đầu tư (tổng 100%)</h4>
-              <div className="space-y-2">
-                {alloc.map((b, i) => (
-                  <div key={b.id || i} className="grid grid-cols-12 gap-2">
-                    <input
-                      className="input col-span-5"
-                      value={b.name}
-                      onChange={(e) => setAlloc((prev) => prev.map((x, idx) => (idx === i ? { ...x, name: e.target.value } : x)))}
-                      disabled={!isAdmin}
-                    />
-                    <select
-                      className="input col-span-4"
-                      value={b.assetClass}
-                      onChange={(e) => setAlloc((prev) => prev.map((x, idx) => (idx === i ? { ...x, assetClass: e.target.value } : x)))}
-                      disabled={!isAdmin}
-                    >
-                      <option value="CASH">Tiền mặt</option>
-                      <option value="STOCK">Cổ phiếu</option>
-                      <option value="GOLD">Vàng</option>
-                      <option value="CRYPTO">Crypto</option>
-                      <option value="REAL_ESTATE">BĐS</option>
-                      <option value="OTHER">Khác</option>
-                    </select>
-                    <input
-                      type="number"
-                      step="0.1"
-                      className={`input col-span-3 ${Number(b.targetPct) > 25 || Number(b.targetPct) < 20 ? "border-[var(--danger)]" : ""}`}
-                      value={b.targetPct}
-                      onChange={(e) => setAlloc((prev) => prev.map((x, idx) => (idx === i ? { ...x, targetPct: Number(e.target.value) || 0 } : x)))}
-                      disabled={!isAdmin}
-                    />
-                  </div>
-                ))}
-              </div>
-              <div className={`text-xs font-semibold ${Math.abs(allocTotal - 100) > 0.01 ? "text-[var(--danger)]" : "text-[var(--success)]"}`}>
-                Tổng phân bổ: {allocTotal.toFixed(1)}% (khuyến nghị mỗi danh mục 20-25%)
-              </div>
-            </div>
-
-            <button onClick={saveFireConfig} disabled={savingConfig || !isAdmin} className="btn btn-primary">
-              {savingConfig ? "Đang lưu..." : "Lưu FIRE Control"}
-            </button>
-          </div>
-        )}
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
@@ -619,6 +487,162 @@ export default function GoalsPage() {
           Lãi suất kỳ vọng 10% là theo năm. Hệ thống quy đổi lãi kép theo tháng khoảng {monthlyEquivalentRatePct.toFixed(2)}%/tháng, không phải 10% mỗi tháng.
         </p>
       </div>
+
+      {isSettingsOpen && (
+        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-[1px] p-4 md:p-8" onClick={() => setIsSettingsOpen(false)}>
+          <div
+            className="mx-auto w-full max-w-5xl max-h-[92vh] overflow-y-auto rounded-2xl border border-[var(--border)] bg-[var(--bg-card)] p-5 md:p-6 shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start justify-between gap-3 mb-1">
+              <div className="flex items-center gap-2">
+                <Flame size={16} className="text-[var(--accent)]" />
+                <h3 className="section-label mb-0">FIRE Control Settings</h3>
+              </div>
+              <button className="btn btn-ghost border border-[var(--border)] p-2" onClick={() => setIsSettingsOpen(false)}>
+                <X size={14} />
+              </button>
+            </div>
+            <p className="text-xs text-[var(--text-muted)] mb-4">
+              Đặt 1 lần theo năm sinh + mục tiêu FIRE. Hệ thống tự tính tuổi hiện tại mỗi năm, không cần bạn cập nhật tuổi thủ công.
+            </p>
+            {!isAdmin && <p className="text-xs text-[var(--warning)] mb-3">Bạn đang ở chế độ chỉ xem. Chỉ Admin mới lưu được thay đổi.</p>}
+
+            {configLoading ? <Skeleton /> : (
+              <div className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div className="form-group">
+                    <label className="form-label">Năm sinh</label>
+                    <input
+                      type="number"
+                      className="input"
+                      value={form.birthYear}
+                      onChange={(e) => setForm({ ...form, birthYear: Number(e.target.value) || currentYear - 27 })}
+                      disabled={!isAdmin}
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">Tuổi hiện tại (tự tính)</label>
+                    <input type="number" className="input" value={derivedAgeFromBirthYear} disabled />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">Tuổi mục tiêu FIRE</label>
+                    <input type="number" className="input" value={form.targetAge} onChange={(e) => setForm({ ...form, targetAge: Number(e.target.value) || 40 })} disabled={!isAdmin} />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">Lãi suất kỳ vọng (%/năm)</label>
+                    <input type="number" step="0.1" className="input" value={form.expectedReturnPct} onChange={(e) => setForm({ ...form, expectedReturnPct: Number(e.target.value) || 10 })} disabled={!isAdmin} />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">Lạm phát (%/năm)</label>
+                    <input type="number" step="0.1" className="input" value={form.inflationPct} onChange={(e) => setForm({ ...form, inflationPct: Number(e.target.value) || 3 })} disabled={!isAdmin} />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">SWR (%/năm)</label>
+                    <input type="number" step="0.1" className="input" value={form.swrPct} onChange={(e) => setForm({ ...form, swrPct: Number(e.target.value) || 4 })} disabled={!isAdmin} />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">Tăng thu nhập (%/năm)</label>
+                    <input type="number" step="0.1" className="input" value={form.salaryGrowthPct} onChange={(e) => setForm({ ...form, salaryGrowthPct: Number(e.target.value) || 5 })} disabled={!isAdmin} />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">Chi tiêu mục tiêu khi FIRE (VNĐ/tháng)</label>
+                    <input type="number" className="input" value={form.targetMonthlyExpenseAtFire} onChange={(e) => setForm({ ...form, targetMonthlyExpenseAtFire: Number(e.target.value) || 0 })} disabled={!isAdmin} />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">Mục tiêu đầu tư tối thiểu (VNĐ/tháng)</label>
+                    <input type="number" className="input" value={form.plannedMonthlyInvest} onChange={(e) => setForm({ ...form, plannedMonthlyInvest: Number(e.target.value) || 0 })} disabled={!isAdmin} />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">Khẩu vị rủi ro</label>
+                    <select className="input" value={form.riskProfile} onChange={(e) => setForm({ ...form, riskProfile: e.target.value })} disabled={!isAdmin}>
+                      <option value="capital_preservation">Bảo toàn vốn</option>
+                      <option value="disciplined_growth">Tăng trưởng kỷ luật</option>
+                      <option value="aggressive">Tấn công mạnh</option>
+                    </select>
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">Chế độ mục tiêu</label>
+                    <select className="input" value={form.objectiveMode} onChange={(e) => setForm({ ...form, objectiveMode: e.target.value })} disabled={!isAdmin}>
+                      <option value="fast_but_safe">Nhanh nhưng an toàn</option>
+                      <option value="balanced">Cân bằng</option>
+                      <option value="max_speed">Nhanh nhất</option>
+                    </select>
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">Kịch bản khi trượt KPI</label>
+                    <select className="input" value={form.missedTargetPolicy} onChange={(e) => setForm({ ...form, missedTargetPolicy: e.target.value })} disabled={!isAdmin}>
+                      <option value="cut_expense_first">Cắt chi trước</option>
+                      <option value="invest_more_first">Tăng đầu tư bù trước</option>
+                      <option value="extend_timeline_first">Giãn timeline trước</option>
+                    </select>
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">Nguồn lãi suất gửi</label>
+                    <select className="input" value={form.depositRateSource} onChange={(e) => setForm({ ...form, depositRateSource: e.target.value })} disabled={!isAdmin}>
+                      <option value="worldbank_vn">Auto (WorldBank VN)</option>
+                      <option value="manual">Nhập tay</option>
+                    </select>
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">Lãi suất gửi nhập tay (%/năm)</label>
+                    <input type="number" step="0.1" className="input" value={form.depositRateManual} onChange={(e) => setForm({ ...form, depositRateManual: Number(e.target.value) || 0 })} disabled={!isAdmin} />
+                  </div>
+                </div>
+
+                <div className="pt-1 space-y-2">
+                  <h4 className="text-sm font-semibold">Phân bổ thu nhập / đầu tư (tổng 100%)</h4>
+                  <div className="space-y-2">
+                    {alloc.map((b, i) => (
+                      <div key={b.id || i} className="grid grid-cols-12 gap-2">
+                        <input
+                          className="input col-span-5"
+                          value={b.name}
+                          onChange={(e) => setAlloc((prev) => prev.map((x, idx) => (idx === i ? { ...x, name: e.target.value } : x)))}
+                          disabled={!isAdmin}
+                        />
+                        <select
+                          className="input col-span-4"
+                          value={b.assetClass}
+                          onChange={(e) => setAlloc((prev) => prev.map((x, idx) => (idx === i ? { ...x, assetClass: e.target.value } : x)))}
+                          disabled={!isAdmin}
+                        >
+                          <option value="CASH">Tiền mặt</option>
+                          <option value="STOCK">Cổ phiếu</option>
+                          <option value="GOLD">Vàng</option>
+                          <option value="CRYPTO">Crypto</option>
+                          <option value="REAL_ESTATE">BĐS</option>
+                          <option value="OTHER">Khác</option>
+                        </select>
+                        <input
+                          type="number"
+                          step="0.1"
+                          className={`input col-span-3 ${Number(b.targetPct) > 25 || Number(b.targetPct) < 20 ? "border-[var(--danger)]" : ""}`}
+                          value={b.targetPct}
+                          onChange={(e) => setAlloc((prev) => prev.map((x, idx) => (idx === i ? { ...x, targetPct: Number(e.target.value) || 0 } : x)))}
+                          disabled={!isAdmin}
+                        />
+                      </div>
+                    ))}
+                  </div>
+                  <div className={`text-xs font-semibold ${Math.abs(allocTotal - 100) > 0.01 ? "text-[var(--danger)]" : "text-[var(--success)]"}`}>
+                    Tổng phân bổ: {allocTotal.toFixed(1)}% (khuyến nghị mỗi danh mục 20-25%)
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-end gap-2 pt-1">
+                  <button onClick={() => setIsSettingsOpen(false)} className="btn btn-ghost border border-[var(--border)]">
+                    Đóng
+                  </button>
+                  <button onClick={saveFireConfig} disabled={savingConfig || !isAdmin} className="btn btn-primary">
+                    {savingConfig ? "Đang lưu..." : "Lưu FIRE Control"}
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
