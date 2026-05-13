@@ -62,19 +62,23 @@ export async function PATCH(req: Request, context: { params: Promise<{ id: strin
 
   try {
     const updateData: any = {};
-    if (body.name) updateData.name = body.name;
+    if (body.name) updateData.name = String(body.name).trim();
     // Only admin can change roles
-    if (body.role && isAdmin) updateData.role = body.role;
-    if (body.phone !== undefined) updateData.phone = body.phone || null;
+    if (body.role && isAdmin) updateData.role = body.role === "ADMIN" ? "ADMIN" : "USER";
+    if (body.phone !== undefined) updateData.phone = body.phone ? String(body.phone).trim() : null;
     if (body.username !== undefined) {
-      if (body.username) {
-        const conflict = await prisma.user.findFirst({ where: { username: body.username, NOT: { id } } });
+      const normalizedUsername = body.username ? String(body.username).trim().toLowerCase() : "";
+      if (normalizedUsername) {
+        const conflict = await prisma.user.findFirst({ where: { username: normalizedUsername, NOT: { id } } });
         if (conflict) return NextResponse.json({ error: "Tên đăng nhập đã tồn tại" }, { status: 400 });
       }
-      updateData.username = body.username || null;
+      updateData.username = normalizedUsername || null;
     }
     if (body.password) {
       const bcrypt = await import("bcryptjs");
+      if (String(body.password).length < 6) {
+        return NextResponse.json({ error: "Mật khẩu tối thiểu 6 ký tự" }, { status: 400 });
+      }
       // Khi user tự đổi mật khẩu, yêu cầu mật khẩu cũ; admin reset cho người khác thì không cần
       if (isSelf) {
         if (!body.oldPassword) {

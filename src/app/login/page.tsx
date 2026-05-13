@@ -14,6 +14,13 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [resetMode, setResetMode] = useState(false);
 
+  const callbackUrl = typeof window !== "undefined"
+    ? new URLSearchParams(window.location.search).get("callbackUrl") || "/dashboard"
+    : "/dashboard";
+  const safeCallbackUrl = callbackUrl.startsWith("/") && !callbackUrl.startsWith("//")
+    ? callbackUrl
+    : "/dashboard";
+
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!login || !password) {
@@ -24,16 +31,17 @@ export default function LoginPage() {
     setError("");
 
     const result = await signIn("credentials", {
-      login,
+      login: login.trim(),
       password,
+      callbackUrl: safeCallbackUrl,
       redirect: false,
     });
 
     if (result?.error) {
-      setError("Thông tin đăng nhập không đúng");
+      setError("Đăng nhập chưa thành công. Vui lòng kiểm tra thông tin và thử lại.");
       setLoading(false);
     } else {
-      router.push("/dashboard");
+      router.push(result?.url || safeCallbackUrl);
       router.refresh();
     }
   };
@@ -88,7 +96,7 @@ export default function LoginPage() {
                   className="input"
                   placeholder="Email, username hoặc số điện thoại"
                   value={login}
-                  onChange={(e) => setLogin(e.target.value)}
+                  onChange={(e) => { setLogin(e.target.value); if (error) setError(""); }}
                   autoComplete="username"
                   autoFocus
                 />
@@ -102,7 +110,7 @@ export default function LoginPage() {
                     className="input"
                     placeholder="••••••••"
                     value={password}
-                    onChange={(e) => setPassword(e.target.value)}
+                    onChange={(e) => { setPassword(e.target.value); if (error) setError(""); }}
                     autoComplete="current-password"
                     style={{ paddingRight: 44 }}
                   />

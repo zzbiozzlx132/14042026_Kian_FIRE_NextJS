@@ -21,7 +21,7 @@ export function Header({ userName }: { userName: string }) {
         <h1 className="text-2xl font-bold tracking-tight">
           Chào mừng trở lại, {userName?.split(" ")[0]}
         </h1>
-        <Link href="/settings" className="p-2 -mr-1 rounded-xl text-[var(--text-muted)] hover:text-[var(--text)] hover:bg-[var(--bg-input)] transition-colors">
+        <Link href="/settings" className="p-2 -mr-1 rounded-xl text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-input)] transition-colors">
           <Settings size={20} />
         </Link>
       </div>

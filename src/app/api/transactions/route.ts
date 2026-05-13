@@ -7,8 +7,10 @@ export async function GET(req: Request) {
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { searchParams } = new URL(req.url);
-  const limit = Number(searchParams.get("limit") || "50");
-  const page = Number(searchParams.get("page") || "1");
+  const limitRaw = Number(searchParams.get("limit") || "50");
+  const pageRaw = Number(searchParams.get("page") || "1");
+  const limit = Number.isFinite(limitRaw) ? Math.min(200, Math.max(1, Math.floor(limitRaw))) : 50;
+  const page = Number.isFinite(pageRaw) ? Math.max(1, Math.floor(pageRaw)) : 1;
 
   const transactions = await prisma.transaction.findMany({
     take: limit,

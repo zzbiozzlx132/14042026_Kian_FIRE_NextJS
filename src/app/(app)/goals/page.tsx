@@ -318,6 +318,11 @@ export default function GoalsPage() {
     if (data.recoveryPlan.status === "recovery") return "text-[var(--danger)]";
     return "text-[var(--warning)]";
   }, [data.recoveryPlan.status]);
+  const recoveryStatusLabel = useMemo(() => {
+    if (data.recoveryPlan.status === "on_track") return "Đúng kế hoạch";
+    if (data.recoveryPlan.status === "recovery") return "Cần phục hồi";
+    return "Cảnh báo";
+  }, [data.recoveryPlan.status]);
 
   return (
     <div className="animate-in fade-in duration-500 max-w-6xl mx-auto space-y-6">
@@ -331,8 +336,8 @@ export default function GoalsPage() {
             <Settings2 size={14} />
             <span>Cài đặt FIRE</span>
           </button>
-          <button onClick={() => setMode("expected")} className={`btn text-sm ${mode === "expected" ? "btn-primary" : "btn-ghost border border-[var(--border)]"}`}>Expected</button>
-          <button onClick={() => setMode("actual")} className={`btn text-sm ${mode === "actual" ? "btn-primary" : "btn-ghost border border-[var(--border)]"}`}>Actual (TWR)</button>
+          <button onClick={() => setMode("expected")} className={`btn text-sm ${mode === "expected" ? "btn-primary" : "btn-ghost border border-[var(--border)]"}`}>Kỳ vọng</button>
+          <button onClick={() => setMode("actual")} className={`btn text-sm ${mode === "actual" ? "btn-primary" : "btn-ghost border border-[var(--border)]"}`}>Thực tế (TWR)</button>
           <button onClick={() => { loadPlan(mode); loadConfig(); }} className="btn btn-ghost border border-[var(--border)] text-sm"><RefreshCw size={14} /></button>
         </div>
       </div>
@@ -360,7 +365,7 @@ export default function GoalsPage() {
           )}
         </Card>
 
-        <Card title="FIRE ETA" icon={Flame}>
+        <Card title="Dự kiến chạm FIRE" icon={Flame}>
           {loading ? <Skeleton /> : (
             <div className="space-y-2 text-sm">
               <Row label="FIRE Number" value={fmtMoney(data.fire.fireNumber)} strong />
@@ -393,7 +398,7 @@ export default function GoalsPage() {
         <Card title="Recovery Playbook" icon={AlertTriangle}>
           {loading ? <Skeleton /> : (
             <div className="space-y-2 text-sm">
-              <div className={`text-xs font-semibold uppercase tracking-wider ${recoveryTone}`}>{data.recoveryPlan.status}</div>
+              <div className={`text-xs font-semibold uppercase tracking-wider ${recoveryTone}`}>{recoveryStatusLabel}</div>
               {data.recoveryPlan.actions.map((a, idx) => (
                 <div key={idx} className="text-[var(--text-secondary)] leading-relaxed">• {a}</div>
               ))}
@@ -433,7 +438,7 @@ export default function GoalsPage() {
       <div className="card">
         <div className="flex items-center gap-2 mb-4">
           <TrendingUp size={16} className="text-[var(--accent)]" />
-          <h3 className="section-label mb-0">Investment Strategy Suggestions</h3>
+          <h3 className="section-label mb-0">Đề xuất chiến lược đầu tư</h3>
         </div>
         {loading ? <Skeleton /> : (
           <div className="space-y-3">

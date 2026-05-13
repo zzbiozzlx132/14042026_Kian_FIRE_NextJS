@@ -10,26 +10,39 @@ import {
 import { toast } from "sonner";
 
 export default function SettingsPage() {
-  const [activeTab, setActiveTab] = useState("users");
+  const { data: session } = useSession();
+  const isAdmin = (session?.user as any)?.role === "ADMIN";
+  const [activeTab, setActiveTab] = useState("profile");
 
   const tabs = [
-    { id: "users", label: "Thành viên", icon: Users },
-    { id: "categories", label: "Hạng mục & Từ khoá", icon: List },
-    { id: "market", label: "Giá thị trường", icon: RefreshCw },
+    { id: "users", label: "Thành viên", icon: Users, adminOnly: true },
+    { id: "categories", label: "Hạng mục & Từ khoá", icon: List, adminOnly: true },
+    { id: "market", label: "Giá thị trường", icon: RefreshCw, adminOnly: true },
     { id: "profile", label: "Tài khoản", icon: UserCircle },
     { id: "telegram", label: "Telegram", icon: Send },
   ];
+  const visibleTabs = tabs.filter((tab) => !tab.adminOnly || isAdmin);
+
+  useEffect(() => {
+    if (!visibleTabs.some((tab) => tab.id === activeTab)) {
+      setActiveTab(visibleTabs[0]?.id || "profile");
+    }
+  }, [activeTab, visibleTabs]);
 
   return (
     <div className="animate-in fade-in duration-500 max-w-5xl mx-auto">
       <div className="mb-8">
         <h1 className="text-2xl font-bold tracking-tight mb-1">Cài Đặt</h1>
-        <p className="text-sm text-[var(--text-muted)]">Quản lý thành viên gia đình, hạng mục và cấu hình hệ thống</p>
+        <p className="text-sm text-[var(--text-muted)]">
+          {isAdmin
+            ? "Quản lý thành viên gia đình, hạng mục và cấu hình hệ thống"
+            : "Cập nhật tài khoản cá nhân và kết nối Telegram"}
+        </p>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
         <div className="md:col-span-1 space-y-1">
-          {tabs.map(tab => (
+          {visibleTabs.map(tab => (
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}

@@ -5,7 +5,7 @@ import { useSession } from "next-auth/react";
 import { Header } from "@/components/layout/header";
 import { CHART_COLORS } from "@/lib/constants";
 import { fmtMoney, fmtMoneyCompact, fmtDate } from "@/lib/utils";
-import { TrendingUp, CreditCard, ArrowUpRight, ArrowDownRight, Activity, ReceiptText, Send, ExternalLink } from "lucide-react";
+import { TrendingUp, CreditCard, ArrowUpRight, ArrowDownRight, Activity, ReceiptText, Send, ExternalLink, CheckCircle2, Circle } from "lucide-react";
 import Link from "next/link";
 import {
   Area,
@@ -29,6 +29,9 @@ interface DashboardData {
   totalDebt: number;
   totalCredit: number;
   totalInvest: number;
+  accountCount: number;
+  transactionCount: number;
+  holdingInvestmentCount: number;
   monthlyIncome: number;
   monthlyExpense: number;
   rangeDays: number;
@@ -73,7 +76,7 @@ export default function DashboardPage() {
 
   const d = data || {
     netWorth: 0, totalAssets: 0, totalDebt: 0, totalCredit: 0,
-    totalInvest: 0, monthlyIncome: 0, monthlyExpense: 0,
+    totalInvest: 0, accountCount: 0, transactionCount: 0, holdingInvestmentCount: 0, monthlyIncome: 0, monthlyExpense: 0,
     rangeDays: range, periodIncome: 0, periodExpense: 0, periodNet: 0,
     avgDailyExpense: 0, biggestExpenseDay: null,
     dailyFlow: [], expenseByCategory: [], expenseByAccount: [],
@@ -81,6 +84,12 @@ export default function DashboardPage() {
   };
 
   const month = new Date().getMonth() + 1;
+  const showQuickStart = !loading && (d.accountCount < 1 || d.transactionCount < 3 || d.holdingInvestmentCount < 1);
+  const quickSteps = [
+    { label: "Tạo tài khoản/ví để ghi nhận dòng tiền", done: d.accountCount >= 1, href: "/assets" },
+    { label: "Nhập ít nhất 3 giao dịch gần đây", done: d.transactionCount >= 3, href: "/transactions/new" },
+    { label: "Khai báo ít nhất 1 khoản đầu tư (nếu có)", done: d.holdingInvestmentCount >= 1, href: "/assets" },
+  ];
 
   return (
     <div className="animate-in fade-in duration-500">
@@ -147,6 +156,28 @@ export default function DashboardPage() {
           </div>
         </div>
       </div>
+
+      {showQuickStart && (
+        <div className="card mb-8">
+          <div className="section-label mb-2">Bắt đầu nhanh</div>
+          <p className="text-sm text-[var(--text-muted)] mb-4">
+            Thiết lập 3 bước này để số liệu FIRE và gợi ý tự động chính xác hơn.
+          </p>
+          <div className="space-y-2">
+            {quickSteps.map((step) => (
+              <Link key={step.label} href={step.href} className="flex items-center justify-between gap-3 rounded-xl border border-[var(--border)] px-3 py-2 hover:bg-[var(--bg-card-hover)]">
+                <div className="flex items-center gap-2 text-sm">
+                  {step.done ? <CheckCircle2 size={16} className="text-[var(--success)]" /> : <Circle size={16} className="text-[var(--text-muted)]" />}
+                  <span>{step.label}</span>
+                </div>
+                <span className={`text-xs font-semibold ${step.done ? "text-[var(--success)]" : "text-[var(--accent)]"}`}>
+                  {step.done ? "Đã xong" : "Làm ngay"}
+                </span>
+              </Link>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Stats Grid */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">

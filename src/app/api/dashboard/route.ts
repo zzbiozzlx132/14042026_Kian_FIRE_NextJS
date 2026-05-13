@@ -187,6 +187,9 @@ export async function GET(req: Request) {
       totalDebt: totalDebtAmount,
       totalCredit,
       totalInvest,
+      accountCount: accounts.length,
+      transactionCount: allTx.length,
+      holdingInvestmentCount: investments.length,
       monthlyIncome,
       monthlyExpense,
       prevIncome,
@@ -211,7 +214,7 @@ export async function GET(req: Request) {
     return NextResponse.json({
       error: "Internal Server Error",
       netWorth: 0, totalAssets: 0, totalDebt: 0, totalCredit: 0,
-      totalInvest: 0, monthlyIncome: 0, monthlyExpense: 0,
+      totalInvest: 0, accountCount: 0, transactionCount: 0, holdingInvestmentCount: 0, monthlyIncome: 0, monthlyExpense: 0,
       prevIncome: 0, prevExpense: 0, selectedMonth: "",
       rangeDays: 30, periodIncome: 0, periodExpense: 0, periodNet: 0,
       avgDailyExpense: 0, biggestExpenseDay: null,
