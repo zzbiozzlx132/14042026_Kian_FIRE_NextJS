@@ -1,383 +1,285 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { fmtMoney } from "@/lib/utils";
-import { TrendingUp, Calculator, Target, ArrowUpRight, ArrowDownRight, Info, Flame, Percent, Lightbulb, AlertTriangle, CheckCircle2, CircleAlert } from "lucide-react";
+import { AlertTriangle, Calculator, CheckCircle2, Flame, LineChart, Percent, RefreshCw, Target, TrendingUp } from "lucide-react";
 
-interface Projection {
-  years: number;
-  futureValue: number;
-  realFutureValue: number;
-  totalContributed: number;
-  interestEarned: number;
-}
+type PlanData = {
+  mode: "expected" | "actual";
+  params: {
+    currentAge: number;
+    targetAge: number;
+    fireTargetYears: number;
+    expectedReturnPct: number;
+    actualReturnPct: number;
+    inflationPct: number;
+    swrPct: number;
+    salaryGrowthPct: number;
+    targetMonthlyExpenseAtFire: number;
+  };
+  benchmark: {
+    vnIndexAnnualReturnPct: number;
+    depositRatePct: number;
+    depositRateSource: string;
+    depositRateUpdatedAt: string | null;
+  };
+  totals: {
+    totalNetWorth: number;
+    investableNetWorth: number;
+    totalCash: number;
+    totalDebt: number;
+    totalInvested: number;
+    totalCurrentValue: number;
+    totalPnL: number;
+    returnPct: number;
+  };
+  cashflow: {
+    avgMonthlyIncome: number;
+    avgMonthlyExpense: number;
+    avgMonthlySavings: number;
+    currentMonthIncome: number;
+    currentMonthExpense: number;
+  };
+  emergencyFund: {
+    current: number;
+    target6m: number;
+    target12m: number;
+    gap6m: number;
+    gap12m: number;
+    monthlyTopUpFor6mIn12Months: number;
+    is6mReady: boolean;
+  };
+  kpi: {
+    monthlyInvestTarget: number;
+    monthlyExpenseCap: number;
+    monthlyEmergencyTopUp: number;
+    monthlyGapToPlan: number;
+    thisWeekIncome: number;
+    thisWeekExpense: number;
+    thisWeekSavings: number;
+    thisWeekInvestProgressPct: number;
+  };
+  fire: {
+    fireNumber: number;
+    fireProgressPct: number;
+    yearsToFire: number;
+    etaYear: number | null;
+    requiredMonthlyInvestForTargetAge: number;
+    requiredAnnualInvestForTargetAge: number;
+    investGapMonthly: number;
+  };
+  allocation: {
+    buckets: Array<{
+      id: string;
+      name: string;
+      assetClass: string;
+      targetPct: number;
+      currentPct: number;
+      targetAmount: number;
+      currentAmount: number;
+      monthlyAdjustAmount: number;
+      exceedsGuardrail: boolean;
+    }>;
+    totalPct: number;
+    exceedsBucketCount: boolean;
+  };
+  strategySuggestions: Array<{
+    type: "allocation" | "valuation" | "recovery";
+    title: string;
+    detail: string;
+    actionAmount?: number;
+    etaImpactMonths?: number;
+  }>;
+  recoveryPlan: {
+    status: "on_track" | "warning" | "recovery";
+    actions: string[];
+  };
+};
 
-interface FireScenario {
-  years: number;
-  requiredReturnPct: number;
-}
-
-interface Insight {
-  type: string;
-  title: string;
-  desc: string;
-  impact: string;
-}
-
-interface ProjectionData {
-  totalInvested: number;
-  totalCurrentValue: number;
-  totalPnL: number;
-  returnPct: number;
-  expectedReturnPct: number;
-  inflationPct: number;
-  savingsRate: number;
-  avgMonthlyIncome: number;
-  avgMonthlyExpense: number;
-  avgMonthlySavings: number;
-  fireNumber: number;
-  fireProgress: number;
-  yearsToFire: number;
-  fireTargetYears: number;
-  requiredMonthlyInvest: number;
-  requiredAnnualInvest: number;
-  investGapMonthly: number;
-  totalNetWorth: number;
-  emergencyFundCurrent: number;
-  emergencyFundMinTarget: number;
-  emergencyFundMaxTarget: number;
-  emergencyFundGapMin: number;
-  emergencyFundGapMax: number;
-  emergencyFundRecommendedMonthly: number;
-  fireScenarios: FireScenario[];
-  insights: Insight[];
-  projections: Projection[];
-  investmentCount: number;
-}
+const EMPTY_PLAN: PlanData = {
+  mode: "expected",
+  params: {
+    currentAge: 27, targetAge: 40, fireTargetYears: 13,
+    expectedReturnPct: 10, actualReturnPct: 0, inflationPct: 3, swrPct: 4, salaryGrowthPct: 5,
+    targetMonthlyExpenseAtFire: 0,
+  },
+  benchmark: { vnIndexAnnualReturnPct: 0, depositRatePct: 6, depositRateSource: "manual_fallback", depositRateUpdatedAt: null },
+  totals: { totalNetWorth: 0, investableNetWorth: 0, totalCash: 0, totalDebt: 0, totalInvested: 0, totalCurrentValue: 0, totalPnL: 0, returnPct: 0 },
+  cashflow: { avgMonthlyIncome: 0, avgMonthlyExpense: 0, avgMonthlySavings: 0, currentMonthIncome: 0, currentMonthExpense: 0 },
+  emergencyFund: { current: 0, target6m: 0, target12m: 0, gap6m: 0, gap12m: 0, monthlyTopUpFor6mIn12Months: 0, is6mReady: false },
+  kpi: { monthlyInvestTarget: 0, monthlyExpenseCap: 0, monthlyEmergencyTopUp: 0, monthlyGapToPlan: 0, thisWeekIncome: 0, thisWeekExpense: 0, thisWeekSavings: 0, thisWeekInvestProgressPct: 0 },
+  fire: { fireNumber: 0, fireProgressPct: 0, yearsToFire: -1, etaYear: null, requiredMonthlyInvestForTargetAge: 0, requiredAnnualInvestForTargetAge: 0, investGapMonthly: 0 },
+  allocation: { buckets: [], totalPct: 0, exceedsBucketCount: false },
+  strategySuggestions: [],
+  recoveryPlan: { status: "warning", actions: [] },
+};
 
 export default function GoalsPage() {
-  const [data, setData] = useState<ProjectionData | null>(null);
+  const [mode, setMode] = useState<"expected" | "actual">("expected");
   const [loading, setLoading] = useState(true);
+  const [data, setData] = useState<PlanData>(EMPTY_PLAN);
 
-  useEffect(() => {
-    fetch("/api/projections")
-      .then(r => r.json())
-      .then(d => { setData(d); setLoading(false); })
-      .catch(() => setLoading(false));
-  }, []);
-
-  const d = data || {
-    totalInvested: 0, totalCurrentValue: 0, totalPnL: 0, returnPct: 0,
-    expectedReturnPct: 10, inflationPct: 3, savingsRate: 0,
-    avgMonthlyIncome: 0, avgMonthlyExpense: 0, avgMonthlySavings: 0,
-    fireNumber: 0, fireProgress: 0, yearsToFire: -1, fireTargetYears: 13,
-    requiredMonthlyInvest: 0, requiredAnnualInvest: 0, investGapMonthly: 0,
-    totalNetWorth: 0, emergencyFundCurrent: 0, emergencyFundMinTarget: 0, emergencyFundMaxTarget: 0,
-    emergencyFundGapMin: 0, emergencyFundGapMax: 0, emergencyFundRecommendedMonthly: 0,
-    fireScenarios: [], insights: [], projections: [], investmentCount: 0,
+  const load = async (m: "expected" | "actual") => {
+    setLoading(true);
+    const res = await fetch(`/api/fire/plan?mode=${m}`);
+    if (res.ok) {
+      const payload = await res.json();
+      setData(payload);
+    }
+    setLoading(false);
   };
 
+  useEffect(() => {
+    load(mode);
+  }, [mode]);
+
+  const recoveryTone = useMemo(() => {
+    if (data.recoveryPlan.status === "on_track") return "text-[var(--success)]";
+    if (data.recoveryPlan.status === "recovery") return "text-[var(--danger)]";
+    return "text-[var(--warning)]";
+  }, [data.recoveryPlan.status]);
+
   return (
-    <div className="animate-in fade-in duration-500 max-w-6xl mx-auto">
-      <div className="mb-8">
-        <h1 className="text-2xl font-bold tracking-tight mb-1">Dự phóng & FIRE</h1>
-        <p className="text-sm text-[var(--text-muted)]">Tính lãi kép + Mục tiêu Tự do Tài chính dựa trên dữ liệu thực</p>
-      </div>
-
-      {/* ═══ FIRE OVERVIEW ═══ */}
-      <div className="card-glass mb-8 overflow-hidden">
-        <div className="flex flex-col md:flex-row gap-8">
-          {/* FIRE Number */}
-          <div className="flex-1">
-            <div className="flex items-center gap-2 mb-4">
-              <div className="w-10 h-10 bg-orange-50 text-orange-600 rounded-xl flex items-center justify-center">
-                <Flame size={20} />
-              </div>
-              <div>
-                <div className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider">FIRE Number</div>
-                <div className="text-xs text-[var(--text-muted)]">25 × Chi tiêu năm (Quy tắc 4%)</div>
-              </div>
-            </div>
-            <div className="text-3xl font-extrabold tracking-tight mb-2">
-              {loading ? <div className="skeleton h-9 w-48"></div> : fmtMoney(d.fireNumber)}
-            </div>
-
-            {/* Progress bar */}
-            <div className="mb-2">
-              <div className="flex justify-between text-xs mb-1">
-                <span className="text-[var(--text-muted)]">Tiến độ</span>
-                <span className="font-bold text-[var(--accent)]">{d.fireProgress}%</span>
-              </div>
-              <div className="w-full h-3 bg-[var(--bg-input)] rounded-full overflow-hidden">
-                <div
-                  className="h-full bg-gradient-to-r from-orange-400 to-orange-600 rounded-full transition-all duration-1000"
-                  style={{ width: `${Math.min(100, d.fireProgress)}%` }}
-                />
-              </div>
-            </div>
-            <div className="text-xs text-[var(--text-muted)]">
-              Tài sản hiện tại: <span className="font-bold text-[var(--text-primary)]">{fmtMoney(d.totalNetWorth)}</span>
-            </div>
-          </div>
-
-          {/* Years to FIRE */}
-          <div className="flex-shrink-0 md:border-l md:border-[var(--border)] md:pl-8 flex flex-col justify-center">
-            <div className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider mb-2">
-              Dự kiến đạt FIRE trong
-            </div>
-            <div className="text-5xl font-extrabold tracking-tighter text-[var(--accent)]">
-              {loading ? "..." : d.yearsToFire > 0 ? `${d.yearsToFire}` : "∞"}
-            </div>
-            <div className="text-sm text-[var(--text-muted)] mt-1">
-              {d.yearsToFire > 0 ? "năm" : "Cần thêm dữ liệu thu chi"}
-            </div>
-          </div>
+    <div className="animate-in fade-in duration-500 max-w-6xl mx-auto space-y-6">
+      <div className="flex items-end justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight mb-1">FIRE Command Center</h1>
+          <p className="text-sm text-[var(--text-muted)]">Lộ trình hành động tháng + checkpoint tuần để tăng tốc đến tự do tài chính.</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <button onClick={() => setMode("expected")} className={`btn text-sm ${mode === "expected" ? "btn-primary" : "btn-ghost border border-[var(--border)]"}`}>Expected</button>
+          <button onClick={() => setMode("actual")} className={`btn text-sm ${mode === "actual" ? "btn-primary" : "btn-ghost border border-[var(--border)]"}`}>Actual (TWR)</button>
+          <button onClick={() => load(mode)} className="btn btn-ghost border border-[var(--border)] text-sm"><RefreshCw size={14} /></button>
         </div>
       </div>
 
-      {/* ═══ FIRE SCENARIOS ═══ */}
-      <div className="card mb-8">
-        <div className="flex items-center gap-3 mb-6">
-          <div className="w-9 h-9 bg-violet-50 text-violet-600 rounded-xl flex items-center justify-center">
-            <Percent size={18} />
-          </div>
-          <div>
-            <h2 className="text-base font-bold">Lãi suất cần để đạt FIRE</h2>
-            <p className="text-xs text-[var(--text-muted)]">Với vốn hiện tại {fmtMoney(d.totalNetWorth)} + góp thêm {fmtMoney(d.avgMonthlySavings)}/tháng</p>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-          {d.fireScenarios.map(s => (
-            <div key={s.years} className="border border-[var(--border)] rounded-xl p-4 text-center hover:border-[var(--accent)] transition-colors">
-              <div className="text-xs text-[var(--text-muted)] font-semibold uppercase tracking-wider mb-1">
-                {s.years} năm
-              </div>
-              <div className={`text-2xl font-extrabold ${
-                s.requiredReturnPct <= 10 ? "text-[var(--success)]" :
-                s.requiredReturnPct <= 20 ? "text-[var(--warning)]" :
-                s.requiredReturnPct <= 50 ? "text-[var(--danger)]" :
-                "text-[var(--text-muted)]"
-              }`}>
-                {s.requiredReturnPct > 90 ? "N/A" : `${s.requiredReturnPct}%`}
-              </div>
-              <div className="text-[10px] text-[var(--text-muted)] mt-1">lãi/năm</div>
-            </div>
-          ))}
-        </div>
-
-        <div className="mt-4 flex gap-4 text-[10px] text-[var(--text-muted)]">
-          <span><span className="inline-block w-2 h-2 rounded-full bg-[var(--success)] mr-1"></span> Dễ đạt (≤10%)</span>
-          <span><span className="inline-block w-2 h-2 rounded-full bg-[var(--warning)] mr-1"></span> Nỗ lực (10-20%)</span>
-          <span><span className="inline-block w-2 h-2 rounded-full bg-[var(--danger)] mr-1"></span> Rất khó (20-50%)</span>
-        </div>
-      </div>
-
-      {/* ═══ SMART INSIGHTS ═══ */}
-      {d.insights.length > 0 && (
-        <div className="card mb-8">
-          <div className="flex items-center gap-3 mb-5">
-            <div className="w-9 h-9 bg-amber-50 text-amber-600 rounded-xl flex items-center justify-center">
-              <Lightbulb size={18} />
-            </div>
-            <div>
-              <h2 className="text-base font-bold">Đề xuất thông minh</h2>
-              <p className="text-xs text-[var(--text-muted)]">Phân tích dữ liệu thu chi & đầu tư để đẩy nhanh FIRE</p>
-            </div>
-          </div>
-
-          <div className="space-y-3">
-            {d.insights.map((insight, i) => {
-              const iconMap: Record<string, any> = {
-                success: CheckCircle2,
-                warning: AlertTriangle,
-                danger: CircleAlert,
-                info: Info,
-              };
-              const colorMap: Record<string, string> = {
-                success: "bg-emerald-50 text-emerald-600 border-emerald-200",
-                warning: "bg-amber-50 text-amber-600 border-amber-200",
-                danger: "bg-red-50 text-red-600 border-red-200",
-                info: "bg-blue-50 text-blue-600 border-blue-200",
-              };
-              const InsightIcon = iconMap[insight.type] || Info;
-              const colors = colorMap[insight.type] || colorMap.info;
-
-              return (
-                <div key={i} className={`flex gap-4 p-4 rounded-xl border ${colors.split(' ')[2] || 'border-[var(--border)]'} bg-[var(--bg-card)]`}>
-                  <div className={`w-9 h-9 rounded-lg flex-shrink-0 flex items-center justify-center ${colors.split(' ').slice(0, 2).join(' ')}`}>
-                    <InsightIcon size={18} />
-                  </div>
-                  <div className="flex-1">
-                    <div className="font-semibold text-sm mb-1">{insight.title}</div>
-                    <div className="text-xs text-[var(--text-secondary)] leading-relaxed mb-2">{insight.desc}</div>
-                    <div className="inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider px-2.5 py-1 rounded-full bg-[var(--bg-input)] text-[var(--text-muted)]">
-                      <Target size={10} /> {insight.impact}
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
-      {/* ═══ INVESTMENT SUMMARY ═══ */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-        <SummaryCard icon={Target} label="Vốn đã đầu tư" value={fmtMoney(d.totalInvested)} color="bg-blue-50 text-blue-600" loading={loading} />
-        <SummaryCard icon={TrendingUp} label="Giá trị hiện tại" value={fmtMoney(d.totalCurrentValue)} color="bg-orange-50 text-orange-600" loading={loading} />
-        <SummaryCard icon={d.totalPnL >= 0 ? ArrowUpRight : ArrowDownRight} label="Lãi/Lỗ" value={`${d.totalPnL >= 0 ? "+" : ""}${fmtMoney(d.totalPnL)} (${d.returnPct}%)`} color={d.totalPnL >= 0 ? "bg-emerald-50 text-emerald-600" : "bg-red-50 text-red-600"} loading={loading} />
-        <SummaryCard icon={Calculator} label="Tiết kiệm TB/tháng" value={fmtMoney(d.avgMonthlySavings)} color="bg-amber-50 text-amber-600" loading={loading} />
-      </div>
-
-      {/* ═══ PARAMETERS ═══ */}
-      <div className="card mb-6">
-        <div className="flex flex-wrap gap-6 text-sm">
-          <div className="flex items-center gap-2">
-            <Info size={14} className="text-[var(--text-muted)]" />
-            <span className="text-[var(--text-muted)]">Lãi suất kỳ vọng:</span>
-            <span className="font-bold text-[var(--success)]">{d.expectedReturnPct}%/năm</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="text-[var(--text-muted)]">Lạm phát:</span>
-            <span className="font-bold text-[var(--danger)]">{d.inflationPct}%/năm</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="text-[var(--text-muted)]">Chi tiêu TB/tháng:</span>
-            <span className="font-bold">{fmtMoney(d.avgMonthlyExpense)}</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="text-[var(--text-muted)]">Thu nhập TB/tháng:</span>
-            <span className="font-bold text-[var(--success)]">{fmtMoney(d.avgMonthlyIncome)}</span>
-          </div>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-8">
-        <div className="card">
-          <div className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider mb-2">Kế hoạch đầu tư để đạt FIRE</div>
-          <div className="text-sm text-[var(--text-muted)] mb-3">
-            Mốc mục tiêu: {d.fireTargetYears} năm (theo tuổi hiện tại → tuổi FIRE mục tiêu)
-          </div>
-          <div className="space-y-2 text-sm">
-            <div className="flex items-center justify-between">
-              <span className="text-[var(--text-muted)]">Cần đầu tư mỗi tháng</span>
-              <span className="font-bold text-[var(--accent)]">{fmtMoney(d.requiredMonthlyInvest)}</span>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-[var(--text-muted)]">Cần đầu tư mỗi năm</span>
-              <span className="font-bold">{fmtMoney(d.requiredAnnualInvest)}</span>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-[var(--text-muted)]">Đang tiết kiệm thực tế/tháng</span>
-              <span className="font-bold text-[var(--success)]">{fmtMoney(d.avgMonthlySavings)}</span>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-[var(--text-muted)]">Thiếu thêm để đạt kế hoạch</span>
-              <span className={`font-bold ${d.investGapMonthly > 0 ? "text-[var(--danger)]" : "text-[var(--success)]"}`}>
-                {d.investGapMonthly > 0 ? fmtMoney(d.investGapMonthly) : "Đã đạt"}
-              </span>
-            </div>
-          </div>
-        </div>
-
-        <div className="card">
-          <div className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider mb-2">Quỹ dự phòng 6–12 tháng</div>
-          <div className="space-y-2 text-sm">
-            <div className="flex items-center justify-between">
-              <span className="text-[var(--text-muted)]">Hiện có</span>
-              <span className="font-bold">{fmtMoney(d.emergencyFundCurrent)}</span>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-[var(--text-muted)]">Mục tiêu tối thiểu (6 tháng)</span>
-              <span className="font-bold">{fmtMoney(d.emergencyFundMinTarget)}</span>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-[var(--text-muted)]">Mục tiêu an toàn (12 tháng)</span>
-              <span className="font-bold">{fmtMoney(d.emergencyFundMaxTarget)}</span>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-[var(--text-muted)]">Còn thiếu mốc 6 tháng</span>
-              <span className={`font-bold ${d.emergencyFundGapMin > 0 ? "text-[var(--danger)]" : "text-[var(--success)]"}`}>
-                {d.emergencyFundGapMin > 0 ? fmtMoney(d.emergencyFundGapMin) : "Đã đủ"}
-              </span>
-            </div>
-          </div>
-          {d.emergencyFundGapMin > 0 && (
-            <div className="mt-3 text-xs text-[var(--text-muted)]">
-              Gợi ý: trích khoảng <span className="font-bold text-[var(--accent)]">{fmtMoney(d.emergencyFundRecommendedMonthly)}</span>/tháng để hoàn thành quỹ 6 tháng trong 12 tháng tới.
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <Card title="Tháng này phải làm gì" icon={Target}>
+          {loading ? <Skeleton /> : (
+            <div className="space-y-2 text-sm">
+              <Row label="Cần đầu tư" value={fmtMoney(data.kpi.monthlyInvestTarget)} strong />
+              <Row label="Trần chi tiêu" value={fmtMoney(data.kpi.monthlyExpenseCap)} />
+              <Row label="Bù quỹ dự phòng" value={fmtMoney(data.kpi.monthlyEmergencyTopUp)} />
+              <Row label="Gap tháng hiện tại" value={data.kpi.monthlyGapToPlan > 0 ? fmtMoney(data.kpi.monthlyGapToPlan) : "Đạt kế hoạch"} valueClass={data.kpi.monthlyGapToPlan > 0 ? "text-[var(--danger)]" : "text-[var(--success)]"} />
             </div>
           )}
-        </div>
+        </Card>
+
+        <Card title="Checkpoint tuần" icon={LineChart}>
+          {loading ? <Skeleton /> : (
+            <div className="space-y-2 text-sm">
+              <Row label="Thu tuần này" value={fmtMoney(data.kpi.thisWeekIncome)} />
+              <Row label="Chi tuần này" value={fmtMoney(data.kpi.thisWeekExpense)} />
+              <Row label="Tích lũy tuần này" value={fmtMoney(data.kpi.thisWeekSavings)} />
+              <Row label="Tiến độ mục tiêu tháng" value={`${data.kpi.thisWeekInvestProgressPct}%`} valueClass={data.kpi.thisWeekInvestProgressPct >= 25 ? "text-[var(--success)]" : "text-[var(--warning)]"} />
+            </div>
+          )}
+        </Card>
+
+        <Card title="FIRE ETA" icon={Flame}>
+          {loading ? <Skeleton /> : (
+            <div className="space-y-2 text-sm">
+              <Row label="FIRE Number" value={fmtMoney(data.fire.fireNumber)} strong />
+              <Row label="Tiến độ hiện tại" value={`${data.fire.fireProgressPct}%`} />
+              <Row label="Dự kiến đạt FIRE" value={data.fire.etaYear ? `${data.fire.etaYear}` : "Chưa xác định"} />
+              <Row label="Số năm còn lại" value={data.fire.yearsToFire > 0 ? `${data.fire.yearsToFire} năm` : "Cần cải thiện KPI"} />
+            </div>
+          )}
+        </Card>
       </div>
 
-      {/* ═══ COMPOUND TABLE 1→30 ═══ */}
-      <div className="card overflow-hidden">
-        <div className="flex items-center gap-3 mb-6">
-          <div className="w-10 h-10 bg-orange-50 text-orange-600 rounded-xl flex items-center justify-center">
-            <Calculator size={20} />
-          </div>
-          <div>
-            <h2 className="text-lg font-bold">Bảng lãi kép 1 → 30 năm</h2>
-            <p className="text-xs text-[var(--text-muted)]">FV = P×(1+r)^n + PMT×((1+r)^n − 1)/r | Vốn: {fmtMoney(d.totalNetWorth)} + {fmtMoney(d.avgMonthlySavings)}/tháng @ {d.expectedReturnPct}%</p>
-          </div>
-        </div>
-
-        {d.projections.length === 0 && !loading ? (
-          <div className="text-center py-12">
-            <div className="w-14 h-14 bg-[var(--bg-input)] rounded-2xl flex items-center justify-center mx-auto mb-4">
-              <Calculator size={24} className="text-[var(--text-muted)]" />
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <Card title="Quỹ dự phòng 6-12 tháng" icon={CheckCircle2}>
+          {loading ? <Skeleton /> : (
+            <div className="space-y-2 text-sm">
+              <Row label="Hiện có" value={fmtMoney(data.emergencyFund.current)} />
+              <Row label="Mục tiêu 6 tháng" value={fmtMoney(data.emergencyFund.target6m)} />
+              <Row label="Mục tiêu 12 tháng" value={fmtMoney(data.emergencyFund.target12m)} />
+              <Row label="Còn thiếu mốc 6 tháng" value={data.emergencyFund.gap6m > 0 ? fmtMoney(data.emergencyFund.gap6m) : "Đã đạt"} valueClass={data.emergencyFund.gap6m > 0 ? "text-[var(--danger)]" : "text-[var(--success)]"} />
             </div>
-            <p className="text-[var(--text-muted)] text-sm">Thêm khoản đầu tư hoặc giao dịch để xem dự phóng</p>
+          )}
+        </Card>
+
+        <Card title="Recovery Playbook" icon={AlertTriangle}>
+          {loading ? <Skeleton /> : (
+            <div className="space-y-2 text-sm">
+              <div className={`text-xs font-semibold uppercase tracking-wider ${recoveryTone}`}>{data.recoveryPlan.status}</div>
+              {data.recoveryPlan.actions.map((a, idx) => (
+                <div key={idx} className="text-[var(--text-secondary)] leading-relaxed">• {a}</div>
+              ))}
+            </div>
+          )}
+        </Card>
+      </div>
+
+      <div className="card">
+        <div className="flex items-center gap-2 mb-4">
+          <Percent size={16} className="text-[var(--accent)]" />
+          <h3 className="section-label mb-0">Đề xuất phân bổ chiến lược (4-5 danh mục)</h3>
+        </div>
+        {loading ? <Skeleton /> : (
+          <div className="space-y-3">
+            {data.allocation.buckets.map((b) => (
+              <div key={b.id} className="grid grid-cols-12 gap-2 items-center p-3 border border-[var(--border)] rounded-xl">
+                <div className="col-span-3 font-semibold text-sm">{b.name}</div>
+                <div className="col-span-2 text-xs text-[var(--text-muted)]">{b.assetClass}</div>
+                <div className="col-span-2 text-sm">Target {b.targetPct}%</div>
+                <div className="col-span-2 text-sm">Hiện tại {b.currentPct}%</div>
+                <div className={`col-span-3 text-sm font-semibold ${b.monthlyAdjustAmount >= 0 ? "text-[var(--success)]" : "text-[var(--danger)]"}`}>
+                  {b.monthlyAdjustAmount >= 0 ? "+" : ""}{fmtMoney(b.monthlyAdjustAmount)}
+                </div>
+              </div>
+            ))}
+            <div className="text-xs text-[var(--text-muted)]">
+              Tổng phân bổ mục tiêu: {data.allocation.totalPct}% {data.allocation.totalPct !== 100 ? "(cần chỉnh về 100%)" : ""}
+            </div>
           </div>
-        ) : (
-          <div className="overflow-x-auto -mx-5">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-[var(--border)]">
-                  <th className="text-left py-3 px-4 text-[var(--text-muted)] font-semibold text-xs uppercase tracking-wider">Năm</th>
-                  <th className="text-right py-3 px-4 text-[var(--text-muted)] font-semibold text-xs uppercase tracking-wider">Tổng góp vốn</th>
-                  <th className="text-right py-3 px-4 text-[var(--text-muted)] font-semibold text-xs uppercase tracking-wider">Lãi kép tích luỹ</th>
-                  <th className="text-right py-3 px-4 font-bold text-xs uppercase tracking-wider text-[var(--accent)]">Tổng tài sản</th>
-                  <th className="text-right py-3 px-4 text-[var(--text-muted)] font-semibold text-xs uppercase tracking-wider">Giá trị thực<br/><span className="text-[10px] font-normal">(sau lạm phát)</span></th>
-                </tr>
-              </thead>
-              <tbody>
-                {d.projections.map((p) => {
-                  const isHighlight = [5, 10, 15, 20, 25, 30].includes(p.years);
-                  const isFire = d.fireNumber > 0 && p.futureValue >= d.fireNumber;
-                  return (
-                    <tr
-                      key={p.years}
-                      className={`border-b border-[var(--border-light)] transition-colors hover:bg-[var(--bg-card-hover)] ${
-                        isHighlight ? "bg-[var(--accent-muted)]" : ""
-                      } ${isFire && !isHighlight ? "bg-orange-50/50" : ""}`}
-                    >
-                      <td className={`py-2.5 px-4 ${isHighlight ? "font-bold text-[var(--accent)]" : "font-medium"}`}>
-                        <span className="flex items-center gap-1.5">
-                          Năm {p.years}
-                          {isFire && p.years === d.projections.find(pp => pp.futureValue >= d.fireNumber)?.years && (
-                            <Flame size={14} className="text-orange-500" />
-                          )}
-                        </span>
-                      </td>
-                      <td className="py-2.5 px-4 text-right text-[var(--text-secondary)] text-xs">
-                        {fmtMoney(p.totalContributed)}
-                      </td>
-                      <td className="py-2.5 px-4 text-right font-semibold text-[var(--success)] text-xs">
-                        +{fmtMoney(p.interestEarned)}
-                      </td>
-                      <td className={`py-2.5 px-4 text-right font-bold ${isHighlight ? "text-base" : "text-sm"}`}>
-                        {fmtMoney(p.futureValue)}
-                      </td>
-                      <td className="py-2.5 px-4 text-right text-[var(--text-muted)] text-xs">
-                        {fmtMoney(p.realFutureValue)}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+        )}
+      </div>
+
+      <div className="card">
+        <div className="flex items-center gap-2 mb-4">
+          <TrendingUp size={16} className="text-[var(--accent)]" />
+          <h3 className="section-label mb-0">Investment Strategy Suggestions</h3>
+        </div>
+        {loading ? <Skeleton /> : (
+          <div className="space-y-3">
+            <div className="text-xs text-[var(--text-muted)]">
+              Benchmark: VNINDEX {data.benchmark.vnIndexAnnualReturnPct}% | Lãi gửi {data.benchmark.depositRatePct}% ({data.benchmark.depositRateSource})
+            </div>
+            {data.strategySuggestions.length === 0 ? (
+              <p className="text-sm text-[var(--text-muted)]">Chưa đủ dữ liệu để phát sinh đề xuất nâng cao.</p>
+            ) : data.strategySuggestions.map((s, idx) => (
+              <div key={idx} className="p-3 border border-[var(--border)] rounded-xl">
+                <div className="font-semibold text-sm mb-1">{s.title}</div>
+                <div className="text-xs text-[var(--text-secondary)] mb-1">{s.detail}</div>
+                {(s.actionAmount || s.etaImpactMonths) && (
+                  <div className="text-xs text-[var(--text-muted)]">
+                    {s.actionAmount ? `Mức hành động: ${fmtMoney(s.actionAmount)}. ` : ""}
+                    {s.etaImpactMonths ? `Tác động ETA ước tính: ${s.etaImpactMonths} tháng.` : ""}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div className="card">
+        <div className="flex items-center gap-2 mb-4">
+          <Calculator size={16} className="text-[var(--accent)]" />
+          <h3 className="section-label mb-0">Thông số mô hình</h3>
+        </div>
+        {loading ? <Skeleton /> : (
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+            <MiniStat label="Expected Return" value={`${data.params.expectedReturnPct}%`} />
+            <MiniStat label="Actual Return (TWR proxy)" value={`${data.params.actualReturnPct}%`} />
+            <MiniStat label="Inflation" value={`${data.params.inflationPct}%`} />
+            <MiniStat label="SWR" value={`${data.params.swrPct}%`} />
+            <MiniStat label="Mục tiêu tháng đầu tư" value={fmtMoney(data.fire.requiredMonthlyInvestForTargetAge)} />
+            <MiniStat label="Mục tiêu năm đầu tư" value={fmtMoney(data.fire.requiredAnnualInvestForTargetAge)} />
+            <MiniStat label="Tuổi hiện tại" value={`${data.params.currentAge}`} />
+            <MiniStat label="Tuổi FIRE mục tiêu" value={`${data.params.targetAge}`} />
           </div>
         )}
       </div>
@@ -385,18 +287,36 @@ export default function GoalsPage() {
   );
 }
 
-function SummaryCard({ icon: Icon, label, value, color, loading }: {
-  icon: any; label: string; value: string; color: string; loading: boolean;
-}) {
+function Card({ title, icon: Icon, children }: { title: string; icon: any; children: ReactNode }) {
   return (
     <div className="card">
-      <div className={`w-9 h-9 rounded-lg flex items-center justify-center mb-3 ${color}`}>
-        <Icon size={18} />
+      <div className="flex items-center gap-2 mb-4">
+        <Icon size={16} className="text-[var(--accent)]" />
+        <h3 className="section-label mb-0">{title}</h3>
       </div>
-      <div className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider mb-1">{label}</div>
-      <div className="text-lg font-bold">
-        {loading ? <div className="skeleton h-6 w-24"></div> : value}
-      </div>
+      {children}
     </div>
   );
+}
+
+function Row({ label, value, strong, valueClass }: { label: string; value: string; strong?: boolean; valueClass?: string }) {
+  return (
+    <div className="flex items-center justify-between gap-3">
+      <span className="text-[var(--text-muted)]">{label}</span>
+      <span className={`${strong ? "font-bold" : "font-semibold"} ${valueClass || ""}`}>{value}</span>
+    </div>
+  );
+}
+
+function MiniStat({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="p-3 rounded-xl border border-[var(--border)] bg-[var(--bg-input)]">
+      <div className="text-xs text-[var(--text-muted)] mb-1">{label}</div>
+      <div className="text-sm font-bold">{value}</div>
+    </div>
+  );
+}
+
+function Skeleton() {
+  return <div className="skeleton h-24 w-full"></div>;
 }

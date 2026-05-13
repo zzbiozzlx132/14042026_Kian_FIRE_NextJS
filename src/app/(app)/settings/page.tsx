@@ -5,7 +5,7 @@ import { useSession } from "next-auth/react";
 import {
   UserCircle, List, Users, Plus, Trash2, Shield, Send, AlertTriangle, X, Pencil,
   Key, Download, Upload, FileText, Clock, Tag, CheckCircle, RefreshCw, ExternalLink, Bell,
-  Eye, EyeOff,
+  Eye, EyeOff, Flame,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -15,6 +15,7 @@ export default function SettingsPage() {
   const tabs = [
     { id: "users", label: "Thành viên", icon: Users },
     { id: "categories", label: "Hạng mục & Từ khoá", icon: List },
+    { id: "fire", label: "FIRE", icon: Flame },
     { id: "market", label: "Giá thị trường", icon: RefreshCw },
     { id: "profile", label: "Tài khoản", icon: UserCircle },
     { id: "telegram", label: "Telegram", icon: Send },
@@ -48,6 +49,7 @@ export default function SettingsPage() {
         <div className="md:col-span-3">
           {activeTab === "users" && <UsersPanel />}
           {activeTab === "categories" && <CategoriesPanel />}
+          {activeTab === "fire" && <FireSettingsPanel />}
           {activeTab === "market" && <MarketDataPanel />}
           {activeTab === "profile" && <ProfilePanel />}
           {activeTab === "telegram" && <TelegramPanel />}
@@ -913,6 +915,259 @@ function ProfilePanel() {
             )}
           </div>
         )}
+      </div>
+    </div>
+  );
+}
+
+/* ═══════ FIRE SETTINGS PANEL ═══════ */
+function FireSettingsPanel() {
+  const { data: session } = useSession();
+  const isAdmin = (session?.user as any)?.role === "ADMIN";
+
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [form, setForm] = useState({
+    currentAge: 27,
+    targetAge: 40,
+    expectedReturnPct: 10,
+    inflationPct: 3,
+    swrPct: 4,
+    salaryGrowthPct: 5,
+    targetMonthlyExpenseAtFire: 0,
+    plannedMonthlyInvest: 0,
+    riskProfile: "capital_preservation",
+    objectiveMode: "fast_but_safe",
+    missedTargetPolicy: "cut_expense_first",
+    depositRateSource: "worldbank_vn",
+    depositRateManual: 6,
+  });
+  const [alloc, setAlloc] = useState<Array<{ id: string; name: string; assetClass: string; targetPct: number }>>([]);
+  const [allocTotal, setAllocTotal] = useState(0);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    const [settingsRes, allocRes] = await Promise.all([
+      fetch("/api/fire/settings"),
+      fetch("/api/fire/allocation"),
+    ]);
+    const settings = await settingsRes.json();
+    const allocation = await allocRes.json();
+
+    setForm({
+      currentAge: Number(settings.currentAge || 27),
+      targetAge: Number(settings.targetAge || 40),
+      expectedReturnPct: Number(settings.expectedReturnPct || 10),
+      inflationPct: Number(settings.inflationPct || 3),
+      swrPct: Number(settings.swrPct || 4),
+      salaryGrowthPct: Number(settings.salaryGrowthPct || 5),
+      targetMonthlyExpenseAtFire: Number(settings.targetMonthlyExpenseAtFire || 0),
+      plannedMonthlyInvest: Number(settings.plannedMonthlyInvest || 0),
+      riskProfile: settings.riskProfile || "capital_preservation",
+      objectiveMode: settings.objectiveMode || "fast_but_safe",
+      missedTargetPolicy: settings.missedTargetPolicy || "cut_expense_first",
+      depositRateSource: settings.depositRateSource || "worldbank_vn",
+      depositRateManual: Number(settings.depositRateManual || 6),
+    });
+
+    const buckets = Array.isArray(allocation?.buckets) ? allocation.buckets : [];
+    setAlloc(buckets.map((b: any) => ({
+      id: b.id,
+      name: b.name,
+      assetClass: b.assetClass || "OTHER",
+      targetPct: Number(b.targetPct || 0),
+    })));
+    setAllocTotal(Number(allocation?.totalPct || 0));
+    setLoading(false);
+  }, []);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  useEffect(() => {
+    setAllocTotal(alloc.reduce((sum, b) => sum + Number(b.targetPct || 0), 0));
+  }, [alloc]);
+
+  const save = async () => {
+    if (!isAdmin) return;
+    if (alloc.length > 5) {
+      toast.error("Tối đa 5 danh mục phân bổ");
+      return;
+    }
+    if (Math.abs(allocTotal - 100) > 0.01) {
+      toast.error("Tổng phân bổ phải bằng 100%");
+      return;
+    }
+
+    setSaving(true);
+    const [settingsRes, allocRes] = await Promise.all([
+      fetch("/api/fire/settings", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(form),
+      }),
+      fetch("/api/fire/allocation", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          buckets: alloc.map((b, idx) => ({
+            id: b.id,
+            name: b.name,
+            assetClass: b.assetClass,
+            targetPct: Number(b.targetPct || 0),
+            sortOrder: idx + 1,
+          })),
+        }),
+      }),
+    ]);
+
+    if (settingsRes.ok && allocRes.ok) {
+      toast.success("Đã lưu cấu hình FIRE");
+      load();
+    } else {
+      const err1 = settingsRes.ok ? "" : (await settingsRes.json().catch(() => ({}))).error;
+      const err2 = allocRes.ok ? "" : (await allocRes.json().catch(() => ({}))).error;
+      toast.error(err1 || err2 || "Lưu cấu hình FIRE thất bại");
+    }
+    setSaving(false);
+  };
+
+  if (loading) return <div className="card p-8"><div className="skeleton h-52 w-full"></div></div>;
+
+  return (
+    <div className="space-y-6">
+      <div className="card p-6">
+        <div className="flex items-center gap-2 mb-1">
+          <Flame size={16} className="text-[var(--accent)]" />
+          <h3 className="section-label mb-0">FIRE Control Settings</h3>
+        </div>
+        <p className="text-xs text-[var(--text-muted)] mb-5">
+          Cấu hình tham số để hệ thống tính con đường ngắn nhất đến FIRE theo hướng nhanh nhưng an toàn.
+        </p>
+
+        <div className="grid grid-cols-2 gap-3 mb-4">
+          <div className="form-group">
+            <label className="form-label">Tuổi hiện tại</label>
+            <input type="number" className="input" value={form.currentAge} onChange={e => setForm({ ...form, currentAge: Number(e.target.value) || 27 })} disabled={!isAdmin} />
+          </div>
+          <div className="form-group">
+            <label className="form-label">Tuổi mục tiêu FIRE</label>
+            <input type="number" className="input" value={form.targetAge} onChange={e => setForm({ ...form, targetAge: Number(e.target.value) || 40 })} disabled={!isAdmin} />
+          </div>
+          <div className="form-group">
+            <label className="form-label">Lãi suất kỳ vọng (%/năm)</label>
+            <input type="number" step="0.1" className="input" value={form.expectedReturnPct} onChange={e => setForm({ ...form, expectedReturnPct: Number(e.target.value) || 10 })} disabled={!isAdmin} />
+          </div>
+          <div className="form-group">
+            <label className="form-label">Lạm phát (%/năm)</label>
+            <input type="number" step="0.1" className="input" value={form.inflationPct} onChange={e => setForm({ ...form, inflationPct: Number(e.target.value) || 3 })} disabled={!isAdmin} />
+          </div>
+          <div className="form-group">
+            <label className="form-label">SWR (%/năm)</label>
+            <input type="number" step="0.1" className="input" value={form.swrPct} onChange={e => setForm({ ...form, swrPct: Number(e.target.value) || 4 })} disabled={!isAdmin} />
+          </div>
+          <div className="form-group">
+            <label className="form-label">Tăng thu nhập (%/năm)</label>
+            <input type="number" step="0.1" className="input" value={form.salaryGrowthPct} onChange={e => setForm({ ...form, salaryGrowthPct: Number(e.target.value) || 5 })} disabled={!isAdmin} />
+          </div>
+          <div className="form-group">
+            <label className="form-label">Chi tiêu mục tiêu khi FIRE (VNĐ/tháng)</label>
+            <input type="number" className="input" value={form.targetMonthlyExpenseAtFire} onChange={e => setForm({ ...form, targetMonthlyExpenseAtFire: Number(e.target.value) || 0 })} disabled={!isAdmin} />
+          </div>
+          <div className="form-group">
+            <label className="form-label">Mục tiêu đầu tư tối thiểu (VNĐ/tháng)</label>
+            <input type="number" className="input" value={form.plannedMonthlyInvest} onChange={e => setForm({ ...form, plannedMonthlyInvest: Number(e.target.value) || 0 })} disabled={!isAdmin} />
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 gap-3 mb-4">
+          <div className="form-group">
+            <label className="form-label">Khẩu vị rủi ro</label>
+            <select className="input" value={form.riskProfile} onChange={e => setForm({ ...form, riskProfile: e.target.value })} disabled={!isAdmin}>
+              <option value="capital_preservation">Bảo toàn vốn</option>
+              <option value="disciplined_growth">Tăng trưởng kỷ luật</option>
+              <option value="aggressive">Tấn công mạnh</option>
+            </select>
+          </div>
+          <div className="form-group">
+            <label className="form-label">Chế độ mục tiêu</label>
+            <select className="input" value={form.objectiveMode} onChange={e => setForm({ ...form, objectiveMode: e.target.value })} disabled={!isAdmin}>
+              <option value="fast_but_safe">Nhanh nhưng an toàn</option>
+              <option value="balanced">Cân bằng</option>
+              <option value="max_speed">Nhanh nhất</option>
+            </select>
+          </div>
+          <div className="form-group">
+            <label className="form-label">Kịch bản khi trượt KPI</label>
+            <select className="input" value={form.missedTargetPolicy} onChange={e => setForm({ ...form, missedTargetPolicy: e.target.value })} disabled={!isAdmin}>
+              <option value="cut_expense_first">Cắt chi trước</option>
+              <option value="invest_more_first">Tăng đầu tư bù trước</option>
+              <option value="extend_timeline_first">Giãn timeline trước</option>
+            </select>
+          </div>
+          <div className="form-group">
+            <label className="form-label">Nguồn lãi suất gửi</label>
+            <select className="input" value={form.depositRateSource} onChange={e => setForm({ ...form, depositRateSource: e.target.value })} disabled={!isAdmin}>
+              <option value="worldbank_vn">Auto (WorldBank VN)</option>
+              <option value="manual">Nhập tay</option>
+            </select>
+          </div>
+        </div>
+
+        <div className="form-group mb-2">
+          <label className="form-label">Lãi suất gửi nhập tay (%/năm)</label>
+          <input type="number" step="0.1" className="input max-w-xs" value={form.depositRateManual} onChange={e => setForm({ ...form, depositRateManual: Number(e.target.value) || 0 })} disabled={!isAdmin} />
+        </div>
+      </div>
+
+      <div className="card p-6">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="section-label mb-0">Phân bổ thu nhập / đầu tư (4-5 danh mục)</h3>
+          <div className={`text-xs font-semibold ${Math.abs(allocTotal - 100) > 0.01 ? "text-[var(--danger)]" : "text-[var(--success)]"}`}>
+            Tổng: {allocTotal.toFixed(1)}%
+          </div>
+        </div>
+        <div className="space-y-3">
+          {alloc.map((b, i) => (
+            <div key={b.id || i} className="grid grid-cols-12 gap-2">
+              <input
+                className="input col-span-5"
+                value={b.name}
+                onChange={e => setAlloc(prev => prev.map((x, idx) => idx === i ? { ...x, name: e.target.value } : x))}
+                disabled={!isAdmin}
+              />
+              <select
+                className="input col-span-4"
+                value={b.assetClass}
+                onChange={e => setAlloc(prev => prev.map((x, idx) => idx === i ? { ...x, assetClass: e.target.value } : x))}
+                disabled={!isAdmin}
+              >
+                <option value="CASH">Tiền mặt</option>
+                <option value="STOCK">Cổ phiếu</option>
+                <option value="GOLD">Vàng</option>
+                <option value="CRYPTO">Crypto</option>
+                <option value="REAL_ESTATE">BĐS</option>
+                <option value="OTHER">Khác</option>
+              </select>
+              <input
+                type="number"
+                step="0.1"
+                className={`input col-span-3 ${Number(b.targetPct) > 25 || Number(b.targetPct) < 20 ? "border-[var(--danger)]" : ""}`}
+                value={b.targetPct}
+                onChange={e => setAlloc(prev => prev.map((x, idx) => idx === i ? { ...x, targetPct: Number(e.target.value) || 0 } : x))}
+                disabled={!isAdmin}
+              />
+            </div>
+          ))}
+        </div>
+        <p className="text-xs text-[var(--text-muted)] mt-3">
+          Cảnh báo mềm khi tỷ trọng từng danh mục vượt 25% hoặc dưới 20%.
+        </p>
+
+        <button onClick={save} disabled={saving || !isAdmin} className="btn btn-primary mt-5">
+          {saving ? "Đang lưu..." : "Lưu cấu hình FIRE"}
+        </button>
       </div>
     </div>
   );

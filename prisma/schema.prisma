@@ -329,6 +329,13 @@ model LifePlanSettings {
   inflationPct         Float   @default(3)
   swrPct               Float   @default(4)
   plannedMonthlyInvest Float   @default(0)
+  salaryGrowthPct      Float   @default(5)
+  riskProfile          String  @default("capital_preservation")
+  objectiveMode        String  @default("fast_but_safe")
+  missedTargetPolicy   String  @default("cut_expense_first")
+  depositRateSource    String  @default("worldbank_vn")
+  depositRateManual    Float?
+  depositRateUpdatedAt DateTime?
   telegramBotToken     String?
 
   // Daily reminder (nhắc nhập thu chi)
@@ -353,6 +360,22 @@ model LifePlanSettings {
   goldPrimarySymbol       String             @default("XAU/USD")
   goldFxSymbol            String             @default("USD/VND")
   goldPremiumPct          Float              @default(0)
+
+  fireAllocationBuckets FireAllocationBucket[]
+}
+
+model FireAllocationBucket {
+  id           String           @id @default(cuid())
+  settingsId   String           @default("default")
+  settings     LifePlanSettings @relation(fields: [settingsId], references: [id], onDelete: Cascade)
+  name         String
+  assetClass   String           @default("OTHER")
+  targetPct    Float
+  sortOrder    Int              @default(0)
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+
+  @@index([settingsId])
 }
 
 // ═══════════════════════════════════════
