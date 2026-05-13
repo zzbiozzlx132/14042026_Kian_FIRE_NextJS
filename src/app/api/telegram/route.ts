@@ -538,20 +538,24 @@ async function handleToday(token: string, chatId: number) {
 }
 
 async function handleHelp(token: string, chatId: number) {
-  const msg = `<b>Kian FIRE Bot</b>
+  const msg = `<b>Kian FIRE Bot — Hướng dẫn nhanh</b>
 
-<b>Nhập giao dịch:</b>
+<b>1) Nếu chưa kết nối tài khoản:</b>
+<code>/pair MÃ</code>
+Ví dụ: <code>/pair ABC123</code>
+
+<b>2) Nhập giao dịch:</b>
 <code>chi 50k cà phê</code>
 <code>thu 5tr lương</code>
 <code>-200 tiền nhà</code>
 <code>+500k freelance</code>
 
-<b>Chỉ định tài khoản (thêm vào cuối):</b>
+<b>3) Chỉ định tài khoản (thêm vào cuối):</b>
 <code>chi 20k cafe vcb</code>
 <code>thu 5tr luong mb</code>
 <code>chi 50k xang momo</code>
 
-<b>Luân chuyển tiền:</b>
+<b>4) Luân chuyển tiền:</b>
 <code>&gt;500k tm vcb</code>
 <code>&gt; 1tr vcb momo</code>
 <code>chuyen 1tr vcb sang momo</code>
@@ -561,7 +565,7 @@ Bot hỏi xác nhận trước khi lưu.
 Bấm <b>Đổi TK</b> để chọn tài khoản khác.
 
 <b>Lệnh:</b>
-/balance — Số dư · /today — Hôm nay · /help`;
+/start · /help · /pair · /balance · /today`;
   await send(token, chatId, msg);
 }
 
@@ -603,6 +607,12 @@ function parseMessage(
   }
 
   return null;
+}
+
+function parseCommand(text: string): string | null {
+  const firstToken = text.trim().split(/\s+/)[0] || "";
+  if (!firstToken.startsWith("/")) return null;
+  return firstToken.toLowerCase().split("@")[0] || null;
 }
 
 function findAccountFromQuery(query: string, accounts: any[]) {
@@ -1078,23 +1088,24 @@ export async function POST(req: Request) {
 
     const chatId = message.chat.id;
     const text = message.text.trim();
+    const command = parseCommand(text);
 
     // Commands
-    if (text === "/start" || text === "/help") {
+    if (command === "/start" || command === "/help" || command === "/commands" || command === "/menu") {
       await handleHelp(token, chatId);
       return NextResponse.json({ ok: true });
     }
-    if (text === "/balance" || text === "/sodu") {
+    if (command === "/balance" || command === "/sodu") {
       await handleBalance(token, chatId);
       return NextResponse.json({ ok: true });
     }
-    if (text === "/today" || text === "/homnay") {
+    if (command === "/today" || command === "/homnay") {
       await handleToday(token, chatId);
       return NextResponse.json({ ok: true });
     }
 
     // ── /pair CODE ─────────────────────────────────────────
-    if (text.toLowerCase().startsWith("/pair")) {
+    if (command === "/pair") {
       const code = text.split(/\s+/)[1]?.toUpperCase();
       if (!code) {
         await send(token, chatId, "❌ Vui lòng nhập mã xác nhận.\nVí dụ: <code>/pair ABC123</code>");

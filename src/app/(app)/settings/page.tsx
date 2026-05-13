@@ -1284,6 +1284,7 @@ function TelegramPanel() {
   const [botInfo, setBotInfo] = useState<{ username: string; name: string } | null>(null);
   const [tokenMasked, setTokenMasked] = useState("");
   const [disconnectConfirm, setDisconnectConfirm] = useState(false);
+  const [syncingCommands, setSyncingCommands] = useState(false);
   const [schedule, setSchedule] = useState<any>({
     reminderTime: "",
     dailyReportTime: "", weeklyReportDay: "", weeklyReportTime: "",
@@ -1333,6 +1334,26 @@ function TelegramPanel() {
       if (data.success) { toast.success(data.message); setConnected(false); setBotInfo(null); setTokenMasked(""); }
     } catch { toast.error("Lỗi ngắt kết nối"); }
     setSaving(false); setDisconnectConfirm(false);
+  };
+
+  const handleSyncCommands = async () => {
+    setSyncingCommands(true);
+    try {
+      const res = await fetch("/api/settings/telegram", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "sync-commands" }),
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        toast.success("Đã đồng bộ menu lệnh. Mở Telegram gõ / để xem.");
+      } else {
+        toast.error(data.error || "Không đồng bộ được menu lệnh");
+      }
+    } catch {
+      toast.error("Lỗi kết nối server");
+    }
+    setSyncingCommands(false);
   };
 
   const handleSaveSchedule = async () => {
@@ -1389,6 +1410,25 @@ function TelegramPanel() {
                 <div className="text-sm text-[var(--text-muted)]">{botInfo.name}</div>
                 <div className="text-xs text-[var(--text-muted)] mt-1">Token: {tokenMasked}</div>
               </div>
+            </div>
+            <div className="p-4 rounded-xl bg-[var(--bg-input)] border border-[var(--border)]">
+              <h4 className="text-xs font-semibold text-[var(--text-muted)] uppercase mb-3">Lệnh bot có sẵn</h4>
+              <div className="text-sm text-[var(--text-secondary)] space-y-1.5">
+                <div><code className="px-1.5 py-0.5 bg-[var(--bg-card)] rounded text-xs">/start</code> hoặc <code className="px-1.5 py-0.5 bg-[var(--bg-card)] rounded text-xs">/help</code> — Hướng dẫn dùng bot</div>
+                <div><code className="px-1.5 py-0.5 bg-[var(--bg-card)] rounded text-xs">/pair MÃ</code> — Kết nối tài khoản web với Telegram</div>
+                <div><code className="px-1.5 py-0.5 bg-[var(--bg-card)] rounded text-xs">/balance</code> — Xem số dư</div>
+                <div><code className="px-1.5 py-0.5 bg-[var(--bg-card)] rounded text-xs">/today</code> — Xem giao dịch hôm nay</div>
+              </div>
+              <button
+                onClick={handleSyncCommands}
+                disabled={syncingCommands}
+                className="btn btn-ghost border border-[var(--border)] w-full mt-3"
+              >
+                {syncingCommands ? "Đang đồng bộ..." : "Đồng bộ menu lệnh /"}
+              </button>
+              <p className="text-xs text-[var(--text-muted)] mt-2">
+                Nếu chưa thấy list lệnh khi gõ <b>/</b>, hãy bấm nút này và mở lại chat bot.
+              </p>
             </div>
             <button onClick={() => setDisconnectConfirm(true)} disabled={saving} className="w-full py-2 rounded-xl border border-[var(--danger)] text-[var(--danger)] hover:bg-red-50 transition-colors text-sm font-medium">
               Ngắt kết nối

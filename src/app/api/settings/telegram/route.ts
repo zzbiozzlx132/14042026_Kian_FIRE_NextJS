@@ -9,6 +9,46 @@ import crypto from "crypto";
  * DELETE /api/settings/telegram — disconnect bot
  */
 
+type TelegramCommand = { command: string; description: string };
+
+const TELEGRAM_COMMANDS: TelegramCommand[] = [
+  { command: "start", description: "Bat dau + huong dan su dung" },
+  { command: "help", description: "Huong dan nhap thu chi" },
+  { command: "commands", description: "Xem danh sach lenh bot" },
+  { command: "pair", description: "Ket noi tai khoan web (vd: /pair ABC123)" },
+  { command: "balance", description: "Xem so du tai khoan" },
+  { command: "today", description: "Xem giao dich hom nay" },
+];
+
+async function registerBotCommands(token: string) {
+  const body = {
+    commands: TELEGRAM_COMMANDS,
+    scope: { type: "default" },
+  };
+  await fetch(`https://api.telegram.org/bot${token}/setMyCommands`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+
+  await fetch(`https://api.telegram.org/bot${token}/setMyDescription`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      description:
+        "Nhap thu chi nhanh cho gia dinh. Ho tro chi/thu/chuyen va bao cao tai chinh.",
+    }),
+  }).catch(() => {});
+
+  await fetch(`https://api.telegram.org/bot${token}/setMyShortDescription`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      short_description: "Nhap thu chi nhanh: chi/thu/chuyen + theo doi so du.",
+    }),
+  }).catch(() => {});
+}
+
 export async function GET() {
   const session = await auth();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -41,6 +81,7 @@ export async function GET() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ url: "https://fire.kiantr.com/api/telegram", secret_token: webhookSecret }),
       }).catch(() => {});
+      registerBotCommands(token).catch(() => {});
     } catch {}
   }
 
@@ -69,7 +110,17 @@ export async function POST(req: Request) {
 
   try {
     const body = await req.json();
-    const { token } = body;
+    const { token, action } = body;
+
+    if (action === "sync-commands") {
+      const existing = await prisma.lifePlanSettings.findFirst();
+      const currentToken = existing?.telegramBotToken;
+      if (!currentToken) {
+        return NextResponse.json({ error: "Bot chưa kết nối" }, { status: 400 });
+      }
+      await registerBotCommands(currentToken);
+      return NextResponse.json({ success: true, message: "Đã đồng bộ menu lệnh Telegram" });
+    }
 
     if (!token) {
       return NextResponse.json({ error: "Vui lòng nhập Bot Token" }, { status: 400 });
@@ -100,6 +151,11 @@ export async function POST(req: Request) {
       body: JSON.stringify({ url: webhookUrl, secret_token: webhookSecret }),
     });
     const webhookData = await webhookRes.json();
+    let commandsSet = false;
+    try {
+      await registerBotCommands(token);
+      commandsSet = true;
+    } catch {}
 
     return NextResponse.json({
       success: true,
@@ -108,6 +164,7 @@ export async function POST(req: Request) {
         name: verifyData.result.first_name,
       },
       webhookSet: webhookData.ok,
+      commandsSet,
       message: `Bot @${verifyData.result.username} đã kết nối thành công!`,
     });
   } catch (error: any) {
