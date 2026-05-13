@@ -1009,22 +1009,22 @@ function MarketDataPanel() {
           <h3 className="section-label mb-0">Nguồn giá tự động</h3>
         </div>
         <p className="text-xs text-[var(--text-muted)] mb-5">
-          Hỗ trợ 2 chế độ: tự động và nhập tay fallback khi nguồn lỗi.
+          Cổ phiếu Việt Nam lấy từ Vnstock (KBS). Vàng và mã quốc tế dùng TwelveData nếu có API key.
         </p>
 
         <div className="space-y-4">
           <div className="form-group">
             <label className="form-label">Provider</label>
-            <input className="input" value="Twelve Data" readOnly />
+            <input className="input" value="Vnstock (KBS) + TwelveData" readOnly />
           </div>
 
           <div className="form-group">
-            <label className="form-label">API Key</label>
+            <label className="form-label">TwelveData API Key (tuỳ chọn)</label>
             <div className="relative">
               <input
                 type={showApiKey ? "text" : "password"}
                 className="input pr-10"
-                placeholder={apiKeyMasked ? `Đang dùng: ${apiKeyMasked}` : "Nhập API key"}
+                placeholder={apiKeyMasked ? `Đang dùng: ${apiKeyMasked}` : "Nhập API key TwelveData"}
                 value={form.apiKey}
                 onChange={e => setForm({ ...form, apiKey: e.target.value })}
               />
@@ -1032,7 +1032,9 @@ function MarketDataPanel() {
                 {showApiKey ? <EyeOff size={16} /> : <Eye size={16} />}
               </button>
             </div>
-            <p className="text-xs text-[var(--text-muted)] mt-1">Để trống nếu muốn giữ key cũ.</p>
+            <p className="text-xs text-[var(--text-muted)] mt-1">
+              Không bắt buộc cho cổ phiếu VN. Chỉ cần khi muốn lấy vàng (XAU/USD, USD/VND) hoặc mã quốc tế.
+            </p>
           </div>
 
           <div className="grid grid-cols-2 gap-3">

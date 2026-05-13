@@ -11,7 +11,7 @@ export async function GET() {
   const key = settings?.marketDataApiKey || "";
 
   return NextResponse.json({
-    provider: settings?.marketDataProvider || "TWELVEDATA",
+    provider: settings?.marketDataProvider || "VNSTOCK",
     apiKeyMasked: key ? `${key.slice(0, 4)}...${key.slice(-3)}` : "",
     hasApiKey: !!key,
     autoUpdate: settings?.marketAutoUpdate || false,
@@ -29,11 +29,12 @@ export async function PATCH(req: Request) {
 
   const body = await req.json();
   const intervalMin = Math.max(1, Math.min(240, Number(body.intervalMin || 15)));
+  const provider = body.provider === "TWELVEDATA" ? "TWELVEDATA" : "VNSTOCK";
 
   await prisma.lifePlanSettings.upsert({
     where: { id: "default" },
     update: {
-      marketDataProvider: "TWELVEDATA",
+      marketDataProvider: provider,
       ...(body.apiKey !== undefined ? { marketDataApiKey: (body.apiKey || "").trim() || null } : {}),
       ...(body.autoUpdate !== undefined ? { marketAutoUpdate: !!body.autoUpdate } : {}),
       marketUpdateIntervalMin: intervalMin,
@@ -43,7 +44,7 @@ export async function PATCH(req: Request) {
     },
     create: {
       id: "default",
-      marketDataProvider: "TWELVEDATA",
+      marketDataProvider: provider,
       marketDataApiKey: (body.apiKey || "").trim() || null,
       marketAutoUpdate: !!body.autoUpdate,
       marketUpdateIntervalMin: intervalMin,

@@ -186,7 +186,7 @@ model Investment {
   priceMode    PriceMode      @default(MANUAL)
   autoPriceEnabled   Boolean            @default(false)
   autoPriceSymbol    String?
-  autoPriceSource    MarketDataProvider @default(TWELVEDATA)
+  autoPriceSource    MarketDataProvider @default(VNSTOCK)
   autoFallbackManual Boolean            @default(true)
   lastPriceSyncAt    DateTime?
   lastPriceSyncStatus String?
@@ -213,6 +213,7 @@ enum PriceMode {
 }
 
 enum MarketDataProvider {
+  VNSTOCK
   TWELVEDATA
 }
 
@@ -344,7 +345,7 @@ model LifePlanSettings {
   cronSecret         String?  // secret key for /api/cron/* endpoints
 
   // Market data auto pricing
-  marketDataProvider      MarketDataProvider @default(TWELVEDATA)
+  marketDataProvider      MarketDataProvider @default(VNSTOCK)
   marketDataApiKey        String?
   marketAutoUpdate        Boolean            @default(false)
   marketUpdateIntervalMin Int                @default(15)

@@ -2,6 +2,7 @@ import { prisma } from "./prisma";
 
 const GRAMS_PER_TROY_OUNCE = 31.1034768;
 const GRAMS_PER_CHI = 3.75;
+const VNSTOCK_KBS_BASE_URL = "https://kbbuddywts.kbsec.com.vn/iis-server/investment";
 
 type MarketSettings = {
   marketDataProvider?: string | null;
@@ -19,6 +20,9 @@ function toNum(value: any): number {
 }
 
 async function fetchTwelveLatestPrice(symbol: string, apiKey: string): Promise<number> {
+  if (!apiKey) {
+    throw new Error("Chưa có API key TwelveData");
+  }
   const url = `https://api.twelvedata.com/price?symbol=${encodeURIComponent(symbol)}&apikey=${encodeURIComponent(apiKey)}`;
   const res = await fetch(url, { method: "GET", cache: "no-store" });
   if (!res.ok) {
@@ -35,22 +39,11 @@ async function fetchTwelveLatestPrice(symbol: string, apiKey: string): Promise<n
   return price;
 }
 
-async function fetchTwelveLatestPriceWithQuery(query: URLSearchParams): Promise<number> {
-  const url = `https://api.twelvedata.com/price?${query.toString()}`;
-  const symbol = query.get("symbol") || "UNKNOWN";
-  const res = await fetch(url, { method: "GET", cache: "no-store" });
-  if (!res.ok) {
-    throw new Error(`TwelveData HTTP ${res.status}`);
-  }
-  const data = await res.json();
-  if (data?.status === "error" || data?.code) {
-    throw new Error(data?.message || `Không lấy được giá cho ${symbol}`);
-  }
-  const price = toNum(data?.price);
-  if (price <= 0) {
-    throw new Error(`Giá trả về không hợp lệ cho ${symbol}`);
-  }
-  return price;
+function formatDateDdMmYyyy(date: Date): string {
+  const dd = String(date.getDate()).padStart(2, "0");
+  const mm = String(date.getMonth() + 1).padStart(2, "0");
+  const yyyy = date.getFullYear();
+  return `${dd}-${mm}-${yyyy}`;
 }
 
 function isLikelyVietnamTicker(symbol: string): boolean {
@@ -75,26 +68,43 @@ function normalizeVietnamStockPrice(rawPrice: number, inv: any): number {
   return price;
 }
 
-async function fetchVietnamStockPrice(symbol: string, apiKey: string): Promise<number> {
-  const exchanges = ["HOSE", "HNX", "UPCOM"];
-  const errors: string[] = [];
+async function fetchVietnamStockPriceViaVnstock(symbol: string): Promise<number> {
+  const symbolUpper = symbol.trim().toUpperCase();
+  const endDate = new Date();
+  const startDate = new Date(endDate);
+  startDate.setDate(startDate.getDate() - 10);
+  const query = new URLSearchParams({
+    sdate: formatDateDdMmYyyy(startDate),
+    edate: formatDateDdMmYyyy(endDate),
+  });
 
-  for (const exchange of exchanges) {
-    const q = new URLSearchParams({
-      apikey: apiKey,
-      symbol: symbol.toUpperCase(),
-      country: "Vietnam",
-      exchange,
-      type: "Common Stock",
-    });
-    try {
-      return await fetchTwelveLatestPriceWithQuery(q);
-    } catch (e: any) {
-      errors.push(`${exchange}:${e?.message || "error"}`);
+  const url = `${VNSTOCK_KBS_BASE_URL}/stocks/${encodeURIComponent(symbolUpper)}/data_day?${query.toString()}`;
+  const res = await fetch(url, {
+    method: "GET",
+    cache: "no-store",
+    headers: {
+      Accept: "application/json",
+      "User-Agent": "kian-fire/1.0",
+    },
+  });
+  if (!res.ok) {
+    throw new Error(`VNSTOCK(KBS) HTTP ${res.status}`);
+  }
+
+  const data = await res.json();
+  const rows = Array.isArray(data?.data_day) ? data.data_day : [];
+  if (!rows.length) {
+    throw new Error(`Không có dữ liệu giá cho mã ${symbolUpper}`);
+  }
+
+  for (const row of rows) {
+    const price = toNum(row?.c ?? row?.close ?? row?.last ?? row?.o ?? row?.open);
+    if (price > 0) {
+      return price;
     }
   }
 
-  throw new Error(`Không tìm thấy mã ${symbol} ở HOSE/HNX/UPCOM (${errors.join(" | ")})`);
+  throw new Error(`Không tìm thấy giá hợp lệ cho mã ${symbolUpper}`);
 }
 
 async function getGoldVndPerChi(settings: MarketSettings, apiKey: string): Promise<number> {
@@ -129,17 +139,13 @@ async function resolveAutoPrice(inv: any, settings: MarketSettings, apiKey: stri
 
   let price = 0;
   if (inv.type === "STOCK" && isLikelyVietnamTicker(symbol)) {
-    try {
-      price = normalizeVietnamStockPrice(await fetchVietnamStockPrice(symbol, apiKey), inv);
-    } catch {
-      // fallback to generic symbol fetch if VN lookup does not resolve
-      price = normalizeVietnamStockPrice(await fetchTwelveLatestPrice(symbol, apiKey), inv);
-    }
+    price = normalizeVietnamStockPrice(await fetchVietnamStockPriceViaVnstock(symbol), inv);
+    return { price: Math.round(price), sourceMeta: `VNSTOCK(KBS):${symbol.toUpperCase()}` };
   } else {
     price = await fetchTwelveLatestPrice(symbol, apiKey);
   }
 
-  return { price: Math.round(price), sourceMeta: symbol };
+  return { price: Math.round(price), sourceMeta: `TWELVEDATA:${symbol}` };
 }
 
 export async function updateAutoInvestmentPrices(opts?: { force?: boolean }) {
@@ -156,9 +162,6 @@ export async function updateAutoInvestmentPrices(opts?: { force?: boolean }) {
 
   if (!force && !autoEnabled) {
     return { updated: 0, failed: 0, skipped: investments.length, logs: ["Auto update đang tắt trong cài đặt"] };
-  }
-  if (!apiKey) {
-    return { updated: 0, failed: 0, skipped: investments.length, logs: ["Chưa có API key dữ liệu thị trường"] };
   }
 
   let updated = 0;
