@@ -348,7 +348,7 @@ model LifePlanSettings {
   marketDataProvider      MarketDataProvider @default(VNSTOCK)
   marketDataApiKey        String?
   marketAutoUpdate        Boolean            @default(false)
-  marketUpdateIntervalMin Int                @default(15)
+  marketUpdateIntervalMin Int                @default(720)
   goldPricingMode         String             @default("XAUUSD_VND_CHI")
   goldPrimarySymbol       String             @default("XAU/USD")
   goldFxSymbol            String             @default("USD/VND")

@@ -15,7 +15,7 @@ export async function GET() {
     apiKeyMasked: key ? `${key.slice(0, 4)}...${key.slice(-3)}` : "",
     hasApiKey: !!key,
     autoUpdate: settings?.marketAutoUpdate || false,
-    intervalMin: settings?.marketUpdateIntervalMin || 15,
+    intervalMin: settings?.marketUpdateIntervalMin || 720,
     goldPrimarySymbol: settings?.goldPrimarySymbol || "XAU/USD",
     goldFxSymbol: settings?.goldFxSymbol || "USD/VND",
     goldPremiumPct: settings?.goldPremiumPct || 0,
@@ -28,7 +28,7 @@ export async function PATCH(req: Request) {
   if ((session.user as any).role !== "ADMIN") return NextResponse.json({ error: "Chỉ Admin được cấu hình" }, { status: 403 });
 
   const body = await req.json();
-  const intervalMin = Math.max(1, Math.min(240, Number(body.intervalMin || 15)));
+  const intervalMin = Math.max(1, Math.min(1440, Number(body.intervalMin || 720)));
   const provider = body.provider === "TWELVEDATA" ? "TWELVEDATA" : "VNSTOCK";
 
   await prisma.lifePlanSettings.upsert({

@@ -927,7 +927,7 @@ function MarketDataPanel() {
   const [form, setForm] = useState({
     apiKey: "",
     autoUpdate: false,
-    intervalMin: 15,
+    intervalMin: 720,
     goldPrimarySymbol: "XAU/USD",
     goldFxSymbol: "USD/VND",
     goldPremiumPct: 0,
@@ -943,7 +943,7 @@ function MarketDataPanel() {
         setForm({
           apiKey: "",
           autoUpdate: !!data.autoUpdate,
-          intervalMin: Number(data.intervalMin || 15),
+          intervalMin: Number(data.intervalMin || 720),
           goldPrimarySymbol: data.goldPrimarySymbol || "XAU/USD",
           goldFxSymbol: data.goldFxSymbol || "USD/VND",
           goldPremiumPct: Number(data.goldPremiumPct || 0),
@@ -1050,11 +1050,12 @@ function MarketDataPanel() {
               <input
                 type="number"
                 min="1"
-                max="240"
+                max="1440"
                 className="input mt-1"
                 value={form.intervalMin}
-                onChange={e => setForm({ ...form, intervalMin: Number(e.target.value) || 15 })}
+                onChange={e => setForm({ ...form, intervalMin: Number(e.target.value) || 720 })}
               />
+              <p className="text-xs text-[var(--text-muted)] mt-1">Gợi ý: 720 phút (2 lần/ngày).</p>
             </div>
           </div>
 

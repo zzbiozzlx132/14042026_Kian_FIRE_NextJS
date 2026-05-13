@@ -151,7 +151,7 @@ async function resolveAutoPrice(inv: any, settings: MarketSettings, apiKey: stri
 export async function updateAutoInvestmentPrices(opts?: { force?: boolean }) {
   const force = !!opts?.force;
   const settings = await prisma.lifePlanSettings.findUnique({ where: { id: "default" } });
-  const intervalMin = Math.max(1, Number(settings?.marketUpdateIntervalMin || 15));
+  const intervalMin = Math.max(1, Number(settings?.marketUpdateIntervalMin || 720));
   const apiKey = (settings?.marketDataApiKey || "").trim();
   const autoEnabled = !!settings?.marketAutoUpdate;
 
