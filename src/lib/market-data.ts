@@ -58,6 +58,23 @@ function isLikelyVietnamTicker(symbol: string): boolean {
   return /^[A-Z]{2,4}$/.test(s);
 }
 
+function normalizeVietnamStockPrice(rawPrice: number, inv: any): number {
+  let price = Math.round(rawPrice);
+
+  // Some feeds return VN quotes in "thousand VND" units.
+  if (price > 10 && price < 1000) {
+    price = price * 1000;
+  }
+
+  // Guardrail: prevent obviously wrong updates (e.g. 27đ for large-cap VN ticker).
+  const baseline = Number(inv.currentPrice || inv.buyPrice || 0);
+  if (baseline >= 10_000 && price <= baseline * 0.3) {
+    throw new Error(`Giá bất thường (${price}) so với tham chiếu (${baseline})`);
+  }
+
+  return price;
+}
+
 async function fetchVietnamStockPrice(symbol: string, apiKey: string): Promise<number> {
   const exchanges = ["HOSE", "HNX", "UPCOM"];
   const errors: string[] = [];
@@ -113,10 +130,10 @@ async function resolveAutoPrice(inv: any, settings: MarketSettings, apiKey: stri
   let price = 0;
   if (inv.type === "STOCK" && isLikelyVietnamTicker(symbol)) {
     try {
-      price = await fetchVietnamStockPrice(symbol, apiKey);
+      price = normalizeVietnamStockPrice(await fetchVietnamStockPrice(symbol, apiKey), inv);
     } catch {
       // fallback to generic symbol fetch if VN lookup does not resolve
-      price = await fetchTwelveLatestPrice(symbol, apiKey);
+      price = normalizeVietnamStockPrice(await fetchTwelveLatestPrice(symbol, apiKey), inv);
     }
   } else {
     price = await fetchTwelveLatestPrice(symbol, apiKey);
