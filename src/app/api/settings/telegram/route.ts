@@ -61,6 +61,14 @@ async function registerBotCommands(token: string) {
       short_description: "Nhap thu chi nhanh: chi/thu/chuyen + theo doi so du.",
     }),
   }).catch(() => {});
+
+  await fetch(`https://api.telegram.org/bot${token}/setChatMenuButton`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      menu_button: { type: "commands" },
+    }),
+  }).catch(() => {});
 }
 
 export async function GET() {

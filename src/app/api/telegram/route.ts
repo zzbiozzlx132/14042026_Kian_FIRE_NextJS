@@ -566,7 +566,14 @@ Bấm <b>Đổi TK</b> để chọn tài khoản khác.
 
 <b>Lệnh:</b>
 /start · /help · /pair · /balance · /today`;
-  await send(token, chatId, msg);
+  await send(token, chatId, msg, {
+    keyboard: [
+      [{ text: "/help" }, { text: "/balance" }, { text: "/today" }],
+      [{ text: "/pair" }, { text: "/commands" }],
+    ],
+    resize_keyboard: true,
+    one_time_keyboard: false,
+  });
 }
 
 // ══════════════════════════════════════════════════════════
