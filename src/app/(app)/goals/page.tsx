@@ -40,6 +40,8 @@ type PlanData = {
     avgMonthlyIncome: number;
     avgMonthlyExpense: number;
     avgMonthlySavings: number;
+    monthsInWindow: number;
+    expenseTotalWindow: number;
     currentMonthIncome: number;
     currentMonthExpense: number;
   };
@@ -131,7 +133,7 @@ const EMPTY_PLAN: PlanData = {
   },
   benchmark: { vnIndexAnnualReturnPct: 0, depositRatePct: 6, depositRateSource: "manual_fallback", depositRateUpdatedAt: null },
   totals: { totalNetWorth: 0, investableNetWorth: 0, totalCash: 0, totalDebt: 0, totalInvested: 0, totalCurrentValue: 0, totalPnL: 0, returnPct: 0 },
-  cashflow: { avgMonthlyIncome: 0, avgMonthlyExpense: 0, avgMonthlySavings: 0, currentMonthIncome: 0, currentMonthExpense: 0 },
+  cashflow: { avgMonthlyIncome: 0, avgMonthlyExpense: 0, avgMonthlySavings: 0, monthsInWindow: 1, expenseTotalWindow: 0, currentMonthIncome: 0, currentMonthExpense: 0 },
   emergencyFund: { current: 0, target6m: 0, target12m: 0, gap6m: 0, gap12m: 0, monthlyTopUpFor6mIn12Months: 0, is6mReady: false },
   kpi: { monthlyInvestTarget: 0, monthlyExpenseCap: 0, monthlyEmergencyTopUp: 0, monthlyGapToPlan: 0, thisWeekIncome: 0, thisWeekExpense: 0, thisWeekSavings: 0, thisWeekInvestProgressPct: 0 },
   fire: { fireNumber: 0, fireProgressPct: 0, yearsToFire: -1, etaYear: null, requiredMonthlyInvestForTargetAge: 0, requiredAnnualInvestForTargetAge: 0, investGapMonthly: 0 },
@@ -374,10 +376,15 @@ export default function GoalsPage() {
         <Card title="Quỹ dự phòng 6-12 tháng" icon={CheckCircle2}>
           {loading ? <Skeleton /> : (
             <div className="space-y-2 text-sm">
-              <p className="text-xs text-[var(--text-muted)]">Tính theo chi tiêu trung bình thực tế 6 tháng gần nhất.</p>
-              <Row label="Hiện có" value={fmtMoney(data.emergencyFund.current)} />
-              <Row label="Mục tiêu 6 tháng" value={fmtMoney(data.emergencyFund.target6m)} />
-              <Row label="Mục tiêu 12 tháng" value={fmtMoney(data.emergencyFund.target12m)} />
+              <p className="text-xs text-[var(--text-muted)]">
+                Công thức: mốc 6 tháng = chi tiêu TB/tháng x 6, mốc 12 tháng = chi tiêu TB/tháng x 12.
+              </p>
+              <Row label="Tổng chi đã lấy để tính" value={fmtMoney(data.cashflow.expenseTotalWindow)} />
+              <Row label="Số tháng dữ liệu" value={`${data.cashflow.monthsInWindow} tháng`} />
+              <Row label="Chi tiêu TB/tháng dùng để tính" value={fmtMoney(data.cashflow.avgMonthlyExpense)} />
+              <Row label="Quỹ dự phòng hiện có" value={fmtMoney(data.emergencyFund.current)} />
+              <Row label="Mục tiêu quỹ 6 tháng" value={fmtMoney(data.emergencyFund.target6m)} />
+              <Row label="Mục tiêu quỹ 12 tháng" value={fmtMoney(data.emergencyFund.target12m)} />
               <Row label="Còn thiếu mốc 6 tháng" value={data.emergencyFund.gap6m > 0 ? fmtMoney(data.emergencyFund.gap6m) : "Đã đạt"} valueClass={data.emergencyFund.gap6m > 0 ? "text-[var(--danger)]" : "text-[var(--success)]"} />
             </div>
           )}

@@ -64,6 +64,8 @@ export type FirePlanOutput = {
     avgMonthlyIncome: number;
     avgMonthlyExpense: number;
     avgMonthlySavings: number;
+    monthsInWindow: number;
+    expenseTotalWindow: number;
     currentMonthIncome: number;
     currentMonthExpense: number;
   };
@@ -279,6 +281,9 @@ function computeMonthlyAverages(transactions: any[]) {
   const avgIncome = income / months;
   const avgExpense = expense / months;
   return {
+    months,
+    incomeTotal: income,
+    expenseTotal: expense,
     avgIncome,
     avgExpense,
     avgSavings: Math.max(0, avgIncome - avgExpense),
@@ -730,6 +735,8 @@ export async function computeFirePlan(mode: FireProjectionMode): Promise<FirePla
       avgMonthlyIncome: round(averages.avgIncome),
       avgMonthlyExpense: round(averages.avgExpense),
       avgMonthlySavings: round(averages.avgSavings),
+      monthsInWindow: round(averages.months),
+      expenseTotalWindow: round(averages.expenseTotal),
       currentMonthIncome: round(currentMonthIncome),
       currentMonthExpense: round(currentMonthExpense),
     },
