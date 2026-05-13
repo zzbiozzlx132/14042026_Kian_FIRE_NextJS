@@ -147,6 +147,9 @@ export default function AssetsPage() {
                       <div className={`text-2xl font-bold ${acc.creditUsed > 0 ? "text-[var(--danger)]" : ""}`}>
                         {acc.creditUsed > 0 ? `-${fmtMoney(acc.creditUsed)}` : fmtMoney(0)}
                       </div>
+                      <div className="mt-1 text-xs text-[var(--text-muted)]">
+                        Đã dùng: <span className="font-semibold text-[var(--danger)]">{fmtMoney(acc.creditUsed || 0)}</span>
+                      </div>
                       {acc.creditLimit > 0 && (
                         <div className="mt-2 space-y-2">
                           <div className="text-xs text-[var(--text-muted)]">
