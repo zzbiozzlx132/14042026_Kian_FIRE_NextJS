@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react
 import { useSession } from "next-auth/react";
 import { fmtMoney } from "@/lib/utils";
 import { toast } from "sonner";
-import { AlertTriangle, Calculator, CheckCircle2, Flame, LineChart, Percent, RefreshCw, Target, TrendingUp } from "lucide-react";
+import { AlertTriangle, Calculator, CheckCircle2, CircleHelp, Flame, LineChart, Percent, RefreshCw, Target, TrendingUp } from "lucide-react";
 
 type PlanData = {
   mode: "expected" | "actual";
@@ -177,6 +177,11 @@ export default function GoalsPage() {
   const monthlyEquivalentRatePct = useMemo(
     () => ((Math.pow(1 + Number(data.params.expectedReturnPct || 0) / 100, 1 / 12) - 1) * 100),
     [data.params.expectedReturnPct],
+  );
+  const isActualReturnOutlier = Math.abs(Number(data.params.actualReturnPct || 0)) > 200;
+  const actualReturnDisplay = useMemo(
+    () => `${Number(data.params.actualReturnPct || 0).toLocaleString("vi-VN", { maximumFractionDigits: 2 })}%`,
+    [data.params.actualReturnPct],
   );
 
   const loadPlan = useCallback(async (m: "expected" | "actual") => {
@@ -585,16 +590,30 @@ export default function GoalsPage() {
         </div>
         {loading ? <Skeleton /> : (
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
-            <MiniStat label="Expected Return" value={`${data.params.expectedReturnPct}%`} />
-            <MiniStat label="Actual Return (TWR proxy)" value={`${data.params.actualReturnPct}%`} />
-            <MiniStat label="Inflation" value={`${data.params.inflationPct}%`} />
-            <MiniStat label="SWR" value={`${data.params.swrPct}%`} />
-            <MiniStat label="Mục tiêu tháng đầu tư" value={fmtMoney(data.fire.requiredMonthlyInvestForTargetAge)} />
-            <MiniStat label="Mục tiêu năm đầu tư" value={fmtMoney(data.fire.requiredAnnualInvestForTargetAge)} />
-            <MiniStat label="Năm sinh" value={`${data.params.birthYear || form.birthYear}`} />
-            <MiniStat label="Tuổi hiện tại" value={`${data.params.currentAge}`} />
+            <MiniStat
+              label="Lãi suất kỳ vọng (%/năm)"
+              value={`${data.params.expectedReturnPct}%`}
+              hint="Mức lợi suất mục tiêu theo năm để dự phóng lộ trình FIRE."
+            />
+            <MiniStat
+              label="Lợi suất thực tế (TWR proxy)"
+              value={actualReturnDisplay}
+              valueClass={isActualReturnOutlier ? "text-[var(--warning)]" : ""}
+              hint="Lợi suất danh mục tính gần đúng theo thời gian nắm giữ. Có thể nhiễu mạnh khi dữ liệu giá sai hoặc vị thế mới mở."
+            />
+            <MiniStat label="Lạm phát (%/năm)" value={`${data.params.inflationPct}%`} hint="Dùng để quy đổi sức mua tương lai khi tính FIRE Number." />
+            <MiniStat label="SWR (%/năm)" value={`${data.params.swrPct}%`} hint="Tỷ lệ rút tiền an toàn mỗi năm sau khi FIRE (mặc định thường dùng 4%)." />
+            <MiniStat label="Mục tiêu đầu tư tháng" value={fmtMoney(data.fire.requiredMonthlyInvestForTargetAge)} hint="Số tiền cần đầu tư mỗi tháng để kịp mốc tuổi FIRE đã đặt." />
+            <MiniStat label="Mục tiêu đầu tư năm" value={fmtMoney(data.fire.requiredAnnualInvestForTargetAge)} hint="Bằng mục tiêu đầu tư tháng x 12." />
+            <MiniStat label="Năm sinh" value={`${data.params.birthYear || form.birthYear}`} hint="Dùng để tự tính tuổi hiện tại theo năm, không cần sửa tay mỗi năm." />
+            <MiniStat label="Tuổi hiện tại (tự tính)" value={`${data.params.currentAge}`} />
             <MiniStat label="Tuổi FIRE mục tiêu" value={`${data.params.targetAge}`} />
           </div>
+        )}
+        {isActualReturnOutlier && (
+          <p className="text-xs text-[var(--warning)] mt-3">
+            Lợi suất thực tế đang rất cao bất thường, thường do giá tài sản auto bị nhiễu/sai đơn vị. Bạn kiểm tra lại giá của các mã đang bật AUTO.
+          </p>
         )}
         <p className="text-xs text-[var(--text-muted)] mt-3">
           Lãi suất kỳ vọng 10% là theo năm. Hệ thống quy đổi lãi kép theo tháng khoảng {monthlyEquivalentRatePct.toFixed(2)}%/tháng, không phải 10% mỗi tháng.
@@ -625,11 +644,18 @@ function Row({ label, value, strong, valueClass }: { label: string; value: strin
   );
 }
 
-function MiniStat({ label, value }: { label: string; value: string }) {
+function MiniStat({ label, value, hint, valueClass }: { label: string; value: string; hint?: string; valueClass?: string }) {
   return (
     <div className="p-3 rounded-xl border border-[var(--border)] bg-[var(--bg-input)]">
-      <div className="text-xs text-[var(--text-muted)] mb-1">{label}</div>
-      <div className="text-sm font-bold">{value}</div>
+      <div className="flex items-center gap-1 text-xs text-[var(--text-muted)] mb-1">
+        <span>{label}</span>
+        {hint ? (
+          <span title={hint} className="inline-flex items-center text-[var(--text-muted)] cursor-help">
+            <CircleHelp size={13} />
+          </span>
+        ) : null}
+      </div>
+      <div className={`text-sm font-bold ${valueClass || ""}`}>{value}</div>
     </div>
   );
 }
