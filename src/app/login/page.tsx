@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { signIn } from "next-auth/react";
+import { useEffect, useState } from "react";
+import { getProviders, signIn } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { Eye, EyeOff, ArrowRight } from "lucide-react";
 
@@ -12,7 +12,9 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
   const [resetMode, setResetMode] = useState(false);
+  const [googleEnabled, setGoogleEnabled] = useState(false);
 
   const callbackUrl = typeof window !== "undefined"
     ? new URLSearchParams(window.location.search).get("callbackUrl") || "/dashboard"
@@ -20,6 +22,23 @@ export default function LoginPage() {
   const safeCallbackUrl = callbackUrl.startsWith("/") && !callbackUrl.startsWith("//")
     ? callbackUrl
     : "/dashboard";
+
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      try {
+        const providers = await getProviders();
+        if (!active) return;
+        setGoogleEnabled(Boolean(providers?.google));
+      } catch {
+        if (!active) return;
+        setGoogleEnabled(false);
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -44,6 +63,13 @@ export default function LoginPage() {
       router.push(result?.url || safeCallbackUrl);
       router.refresh();
     }
+  };
+
+  const handleGoogleLogin = async () => {
+    setError("");
+    setGoogleLoading(true);
+    await signIn("google", { callbackUrl: safeCallbackUrl });
+    setGoogleLoading(false);
   };
 
 
@@ -141,7 +167,7 @@ export default function LoginPage() {
               <button
                 type="submit"
                 className="btn btn-primary login-btn"
-                disabled={loading}
+                disabled={loading || googleLoading}
               >
                 {loading ? (
                   <span className="login-spinner" />
@@ -152,6 +178,26 @@ export default function LoginPage() {
                   </>
                 )}
               </button>
+
+              {googleEnabled && (
+                <button
+                  type="button"
+                  className="btn login-btn login-google-btn"
+                  onClick={handleGoogleLogin}
+                  disabled={loading || googleLoading}
+                >
+                  {googleLoading ? (
+                    <span className="login-spinner login-spinner-dark" />
+                  ) : (
+                    <>
+                      <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true">
+                        <path fill="#EA4335" d="M12 10.2v3.9h5.5c-.2 1.2-1.5 3.6-5.5 3.6-3.3 0-6-2.7-6-6s2.7-6 6-6c1.9 0 3.1.8 3.8 1.5l2.6-2.5C16.8 3.3 14.6 2.4 12 2.4 6.7 2.4 2.4 6.7 2.4 12s4.3 9.6 9.6 9.6c5.5 0 9.2-3.9 9.2-9.3 0-.6-.1-1.1-.1-1.5H12Z"/>
+                      </svg>
+                      Đăng nhập với Google
+                    </>
+                  )}
+                </button>
+              )}
 
               <button
                 type="button"
@@ -288,6 +334,23 @@ export default function LoginPage() {
           font-size: 15px;
           font-weight: 600;
           border-radius: 14px;
+        }
+        .login-google-btn {
+          margin-top: 10px;
+          background: var(--surface);
+          border: 1px solid var(--border);
+          color: var(--text);
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          gap: 10px;
+        }
+        .login-google-btn:hover {
+          background: var(--surface-hover);
+        }
+        .login-spinner-dark {
+          border-color: rgba(0,0,0,0.15);
+          border-top-color: var(--text);
         }
         .login-spinner {
           width: 20px;
