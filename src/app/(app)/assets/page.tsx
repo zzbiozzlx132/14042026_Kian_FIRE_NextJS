@@ -25,6 +25,7 @@ export default function AssetsPage() {
   const [activeTab, setActiveTab] = useState("accounts");
   const [accounts, setAccounts] = useState<any[]>([]);
   const [investments, setInvestments] = useState<any[]>([]);
+  const [priceSyncing, setPriceSyncing] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
   const [showInvModal, setShowInvModal] = useState(false);
   const [editInv, setEditInv] = useState<any>(null);
@@ -32,10 +33,35 @@ export default function AssetsPage() {
   const [sellTarget, setSellTarget] = useState<any>(null);
   const [editAccount, setEditAccount] = useState<any>(null);
 
+  const loadInvestments = () => {
+    fetch("/api/investments").then(r => r.json()).then(d => { if (Array.isArray(d)) setInvestments(d); });
+  };
+
   useEffect(() => {
     fetch("/api/accounts").then(r => r.json()).then(d => { if (Array.isArray(d)) setAccounts(d); });
-    fetch("/api/investments").then(r => r.json()).then(d => { if (Array.isArray(d)) setInvestments(d); });
+    loadInvestments();
   }, []);
+
+  const handleSyncAutoPrices = async () => {
+    setPriceSyncing(true);
+    try {
+      const res = await fetch("/api/settings/market-data", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "sync-now" }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        toast.error(data.error || "Không đồng bộ được giá");
+      } else {
+        toast.success(`Đồng bộ xong: ${data.updated || 0} khoản, lỗi ${data.failed || 0}`);
+        loadInvestments();
+      }
+    } catch {
+      toast.error("Lỗi kết nối khi đồng bộ");
+    }
+    setPriceSyncing(false);
+  };
 
   const holdingInvestments = investments.filter(i => i.status === "holding");
   const soldInvestments = investments.filter(i => i.status === "sold");
@@ -183,6 +209,11 @@ export default function AssetsPage() {
       {/* ═══ INVESTMENTS TAB ═══ */}
       {activeTab === "investments" && (
         <div>
+          <div className="flex justify-end mb-4">
+            <button onClick={handleSyncAutoPrices} disabled={priceSyncing} className="btn btn-ghost border border-[var(--border)] text-sm py-2 px-4">
+              {priceSyncing ? "Đang đồng bộ..." : "Cập nhật giá tự động"}
+            </button>
+          </div>
           {/* Summary Cards */}
           {holdingInvestments.length > 0 && (
             <div className="grid grid-cols-3 gap-4 mb-6">
@@ -295,6 +326,11 @@ function InvestmentCard({ inv, sold, onEdit, onDelete, onSell }: {
             <span className="text-[10px] px-2 py-0.5 rounded-full bg-[var(--bg-input)] text-[var(--text-muted)] font-semibold uppercase">
               {INV_TYPE_LABELS[inv.type] || inv.type}
             </span>
+            {inv.priceMode === "AUTO" && (
+              <span className="text-[10px] px-2 py-0.5 rounded-full bg-blue-50 text-blue-600 border border-blue-200 font-semibold">
+                AUTO
+              </span>
+            )}
             {sold && <span className="text-[10px] px-2 py-0.5 rounded-full bg-red-50 text-red-600 font-semibold">Đã bán</span>}
           </div>
 
@@ -319,6 +355,18 @@ function InvestmentCard({ inv, sold, onEdit, onDelete, onSell }: {
           </div>
 
           {inv.note && <div className="text-xs text-[var(--text-muted)] mt-2 italic">{inv.note}</div>}
+          {inv.priceMode === "AUTO" && (
+            <div className="text-[11px] mt-2">
+              <span className="text-[var(--text-muted)]">
+                {inv.lastPriceSyncAt ? `Cập nhật: ${fmtDate(inv.lastPriceSyncAt)}` : "Chưa đồng bộ giá"}
+              </span>
+              {inv.lastPriceSyncStatus === "ERROR" && inv.lastPriceSyncError && (
+                <div className="text-[var(--danger)] mt-0.5">
+                  Lỗi auto: {inv.lastPriceSyncError}
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Right: Value + PnL + Actions */}
@@ -439,16 +487,38 @@ function AddAccountModal({ onClose, onCreated }: { onClose: () => void; onCreate
 
 /* ═══ ADD INVESTMENT MODAL ═══ */
 function AddInvestmentModal({ onClose, onCreated }: { onClose: () => void; onCreated: (inv: any) => void }) {
-  const [form, setForm] = useState({ name: "", type: "GOLD", buyPrice: "", currentPrice: "", quantity: "1", note: "" });
+  const [form, setForm] = useState({
+    name: "",
+    type: "GOLD",
+    buyPrice: "",
+    currentPrice: "",
+    quantity: "1",
+    note: "",
+    autoPriceEnabled: false,
+    autoPriceSymbol: "",
+    autoFallbackManual: true,
+  });
   const [loading, setLoading] = useState(false);
 
   const unit = INV_UNIT[form.type] || "đơn vị";
 
   const handleSubmit = async () => {
     if (!form.name || !form.buyPrice) { toast.error("Nhập tên và giá mua"); return; }
+    if (form.autoPriceEnabled && form.type !== "GOLD" && !form.autoPriceSymbol.trim()) {
+      toast.error("Vui lòng nhập mã tự động (symbol)");
+      return;
+    }
     setLoading(true);
     const res = await fetch("/api/investments", { method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ...form, buyPrice: parseAmount(form.buyPrice), currentPrice: parseAmount(form.currentPrice || form.buyPrice), quantity: parseFloat(form.quantity) || 1 }) });
+      body: JSON.stringify({
+        ...form,
+        buyPrice: parseAmount(form.buyPrice),
+        currentPrice: parseAmount(form.currentPrice || form.buyPrice),
+        quantity: parseFloat(form.quantity) || 1,
+        autoPriceEnabled: form.autoPriceEnabled,
+        autoPriceSymbol: form.autoPriceSymbol,
+        autoFallbackManual: form.autoFallbackManual,
+      }) });
     if (res.ok) { toast.success("Đã thêm khoản đầu tư"); onCreated(await res.json()); }
     else toast.error("Thêm thất bại");
     setLoading(false);
@@ -481,6 +551,54 @@ function AddInvestmentModal({ onClose, onCreated }: { onClose: () => void; onCre
           <div className="form-group"><label className="form-label">Giá hiện tại / {unit} (VNĐ)</label>
             <MoneyInput placeholder="Bằng giá mua nếu bỏ trống" value={form.currentPrice} onChange={val => setForm({...form, currentPrice: val})} />
           </div>
+          <div className="form-group col-span-2">
+            <label className="inline-flex items-center gap-2 text-sm font-medium">
+              <input
+                type="checkbox"
+                checked={form.autoPriceEnabled}
+                onChange={e => setForm({
+                  ...form,
+                  autoPriceEnabled: e.target.checked,
+                  autoPriceSymbol: e.target.checked && form.type === "GOLD" ? "XAU/USD" : form.autoPriceSymbol,
+                })}
+                className="w-4 h-4 accent-[var(--accent)]"
+              />
+              Bật giá tự động
+            </label>
+            <p className="text-xs text-[var(--text-muted)] mt-1">
+              Khi bật, hệ thống tự lấy giá từ nguồn dữ liệu. Nếu lỗi sẽ giữ giá nhập tay.
+            </p>
+          </div>
+          {form.autoPriceEnabled && form.type !== "GOLD" && (
+            <div className="form-group col-span-2">
+              <label className="form-label">Mã tự động (Symbol)</label>
+              <input
+                className="input"
+                placeholder="VD: FPT, VNM hoặc AAPL"
+                value={form.autoPriceSymbol}
+                onChange={e => setForm({ ...form, autoPriceSymbol: e.target.value })}
+              />
+            </div>
+          )}
+          {form.autoPriceEnabled && form.type === "GOLD" && (
+            <div className="form-group col-span-2">
+              <label className="form-label">Nguồn vàng tự động</label>
+              <input className="input" value="XAU/USD -> USD/VND -> quy đổi ra VND/chỉ" readOnly />
+            </div>
+          )}
+          {form.autoPriceEnabled && (
+            <div className="form-group col-span-2">
+              <label className="inline-flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={form.autoFallbackManual}
+                  onChange={e => setForm({ ...form, autoFallbackManual: e.target.checked })}
+                  className="w-4 h-4 accent-[var(--accent)]"
+                />
+                Lỗi tự động thì giữ giá nhập tay (fallback)
+              </label>
+            </div>
+          )}
           <div className="form-group col-span-2"><label className="form-label">Ghi chú (tuỳ chọn)</label>
             <input className="input" placeholder="VD: Mua tại SJC Q1" value={form.note} onChange={e => setForm({...form, note: e.target.value})} />
           </div>
@@ -506,6 +624,9 @@ function AddInvestmentModal({ onClose, onCreated }: { onClose: () => void; onCre
 function EditInvestmentModal({ inv, onClose, onUpdated }: { inv: any; onClose: () => void; onUpdated: (inv: any) => void }) {
   const [currentPrice, setCurrentPrice] = useState(inv.currentPrice.toString());
   const [quantity, setQuantity] = useState(inv.quantity.toString());
+  const [autoPriceEnabled, setAutoPriceEnabled] = useState(!!inv.autoPriceEnabled || inv.priceMode === "AUTO");
+  const [autoPriceSymbol, setAutoPriceSymbol] = useState(inv.autoPriceSymbol || (inv.type === "GOLD" ? "XAU/USD" : ""));
+  const [autoFallbackManual, setAutoFallbackManual] = useState(inv.autoFallbackManual !== false);
   const [loading, setLoading] = useState(false);
   const unit = INV_UNIT[inv.type] || "đơn vị";
 
@@ -514,9 +635,19 @@ function EditInvestmentModal({ inv, onClose, onUpdated }: { inv: any; onClose: (
   const pnl = newValue - cost;
 
   const handleSubmit = async () => {
+    if (autoPriceEnabled && inv.type !== "GOLD" && !autoPriceSymbol.trim()) {
+      toast.error("Vui lòng nhập mã tự động (symbol)");
+      return;
+    }
     setLoading(true);
     const res = await fetch(`/api/investments/${inv.id}`, { method: "PUT", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ currentPrice: parseAmount(currentPrice), quantity: parseFloat(quantity) }) });
+      body: JSON.stringify({
+        currentPrice: parseAmount(currentPrice),
+        quantity: parseFloat(quantity),
+        autoPriceEnabled,
+        autoPriceSymbol: autoPriceSymbol.trim(),
+        autoFallbackManual,
+      }) });
     if (res.ok) { toast.success("Đã cập nhật"); onUpdated(await res.json()); }
     else toast.error("Cập nhật thất bại");
     setLoading(false);
@@ -542,6 +673,41 @@ function EditInvestmentModal({ inv, onClose, onUpdated }: { inv: any; onClose: (
           <div className="form-group"><label className="form-label">Giá hiện tại / {unit}</label>
             <MoneyInput className="text-lg font-bold" value={currentPrice} onChange={setCurrentPrice} autoFocus />
           </div>
+        </div>
+
+        <div className="mt-4 p-3 rounded-xl border border-[var(--border)] space-y-3">
+          <label className="inline-flex items-center gap-2 text-sm font-medium">
+            <input
+              type="checkbox"
+              checked={autoPriceEnabled}
+              onChange={e => setAutoPriceEnabled(e.target.checked)}
+              className="w-4 h-4 accent-[var(--accent)]"
+            />
+            Bật giá tự động cho khoản này
+          </label>
+
+          {autoPriceEnabled && inv.type !== "GOLD" && (
+            <div className="form-group">
+              <label className="form-label">Mã tự động (Symbol)</label>
+              <input className="input" value={autoPriceSymbol} onChange={e => setAutoPriceSymbol(e.target.value)} placeholder="VD: FPT, AAPL, BTC/USD" />
+            </div>
+          )}
+
+          {autoPriceEnabled && inv.type === "GOLD" && (
+            <div className="text-xs text-[var(--text-muted)]">Vàng tự động dùng công thức XAU/USD → USD/VND → VND/chỉ.</div>
+          )}
+
+          {autoPriceEnabled && (
+            <label className="inline-flex items-center gap-2 text-xs">
+              <input
+                type="checkbox"
+                checked={autoFallbackManual}
+                onChange={e => setAutoFallbackManual(e.target.checked)}
+                className="w-4 h-4 accent-[var(--accent)]"
+              />
+              Khi tự động lỗi, giữ giá nhập tay
+            </label>
+          )}
         </div>
 
         <div className="mt-4 p-3 rounded-xl bg-[var(--bg-input)] text-xs space-y-1">

@@ -183,6 +183,14 @@ model Investment {
   buyPrice     Float
   currentPrice Float
   quantity     Float          @default(1)
+  priceMode    PriceMode      @default(MANUAL)
+  autoPriceEnabled   Boolean            @default(false)
+  autoPriceSymbol    String?
+  autoPriceSource    MarketDataProvider @default(TWELVEDATA)
+  autoFallbackManual Boolean            @default(true)
+  lastPriceSyncAt    DateTime?
+  lastPriceSyncStatus String?
+  lastPriceSyncError  String?
   buyDate      DateTime?
   status       String         @default("holding")
   note         String?
@@ -197,6 +205,15 @@ enum InvestmentType {
   REAL_ESTATE
   TERM_DEPOSIT
   OTHER
+}
+
+enum PriceMode {
+  MANUAL
+  AUTO
+}
+
+enum MarketDataProvider {
+  TWELVEDATA
 }
 
 // ═══════════════════════════════════════
@@ -325,6 +342,16 @@ model LifePlanSettings {
   quarterlyReport    Boolean  @default(false)
   yearlyReport       Boolean  @default(false)
   cronSecret         String?  // secret key for /api/cron/* endpoints
+
+  // Market data auto pricing
+  marketDataProvider      MarketDataProvider @default(TWELVEDATA)
+  marketDataApiKey        String?
+  marketAutoUpdate        Boolean            @default(false)
+  marketUpdateIntervalMin Int                @default(15)
+  goldPricingMode         String             @default("XAUUSD_VND_CHI")
+  goldPrimarySymbol       String             @default("XAU/USD")
+  goldFxSymbol            String             @default("USD/VND")
+  goldPremiumPct          Float              @default(0)
 }
 
 // ═══════════════════════════════════════

@@ -18,6 +18,7 @@ export async function POST(req: Request) {
 
   try {
     const body = await req.json();
+    const autoEnabled = !!body.autoPriceEnabled;
     const inv = await prisma.investment.create({
       data: {
         name: body.name,
@@ -25,6 +26,11 @@ export async function POST(req: Request) {
         buyPrice: Number(body.buyPrice) || 0,
         currentPrice: Number(body.currentPrice) || Number(body.buyPrice) || 0,
         quantity: Number(body.quantity) || 1,
+        priceMode: autoEnabled ? "AUTO" : (body.priceMode === "AUTO" ? "AUTO" : "MANUAL"),
+        autoPriceEnabled: autoEnabled,
+        autoPriceSymbol: body.autoPriceSymbol ? String(body.autoPriceSymbol).trim() : null,
+        autoPriceSource: "TWELVEDATA",
+        autoFallbackManual: body.autoFallbackManual !== false,
         buyDate: body.buyDate ? new Date(body.buyDate) : new Date(),
         note: body.note || "",
         status: "holding",

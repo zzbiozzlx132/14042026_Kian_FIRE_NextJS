@@ -1,5 +1,6 @@
 import { prisma } from "./prisma";
 import { buildReport, getSummary, dateRange } from "./report-engine";
+import { updateAutoInvestmentPrices } from "./market-data";
 
 let started = false;
 
@@ -16,6 +17,11 @@ export function startScheduler() {
 
 async function tick() {
   try {
+    const autoPriceResult = await updateAutoInvestmentPrices();
+    if (autoPriceResult.updated > 0 || autoPriceResult.failed > 0) {
+      console.log(`[Scheduler] Auto price updated=${autoPriceResult.updated}, failed=${autoPriceResult.failed}, skipped=${autoPriceResult.skipped}`);
+    }
+
     const settings = await prisma.lifePlanSettings.findUnique({ where: { id: "default" } });
     if (!settings?.telegramBotToken) return;
 

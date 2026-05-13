@@ -15,6 +15,7 @@ export default function SettingsPage() {
   const tabs = [
     { id: "users", label: "Thành viên", icon: Users },
     { id: "categories", label: "Hạng mục & Từ khoá", icon: List },
+    { id: "market", label: "Giá thị trường", icon: RefreshCw },
     { id: "profile", label: "Tài khoản", icon: UserCircle },
     { id: "telegram", label: "Telegram", icon: Send },
   ];
@@ -47,6 +48,7 @@ export default function SettingsPage() {
         <div className="md:col-span-3">
           {activeTab === "users" && <UsersPanel />}
           {activeTab === "categories" && <CategoriesPanel />}
+          {activeTab === "market" && <MarketDataPanel />}
           {activeTab === "profile" && <ProfilePanel />}
           {activeTab === "telegram" && <TelegramPanel />}
         </div>
@@ -911,6 +913,179 @@ function ProfilePanel() {
             )}
           </div>
         )}
+      </div>
+    </div>
+  );
+}
+
+/* ═══════ MARKET DATA PANEL ═══════ */
+function MarketDataPanel() {
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [syncing, setSyncing] = useState(false);
+  const [showApiKey, setShowApiKey] = useState(false);
+  const [form, setForm] = useState({
+    apiKey: "",
+    autoUpdate: false,
+    intervalMin: 15,
+    goldPrimarySymbol: "XAU/USD",
+    goldFxSymbol: "USD/VND",
+    goldPremiumPct: 0,
+  });
+  const [apiKeyMasked, setApiKeyMasked] = useState("");
+
+  const load = useCallback(() => {
+    setLoading(true);
+    fetch("/api/settings/market-data")
+      .then(r => r.json())
+      .then(data => {
+        setApiKeyMasked(data.apiKeyMasked || "");
+        setForm({
+          apiKey: "",
+          autoUpdate: !!data.autoUpdate,
+          intervalMin: Number(data.intervalMin || 15),
+          goldPrimarySymbol: data.goldPrimarySymbol || "XAU/USD",
+          goldFxSymbol: data.goldFxSymbol || "USD/VND",
+          goldPremiumPct: Number(data.goldPremiumPct || 0),
+        });
+      })
+      .finally(() => setLoading(false));
+  }, []);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  const save = async () => {
+    setSaving(true);
+    const payload: any = {
+      autoUpdate: form.autoUpdate,
+      intervalMin: form.intervalMin,
+      goldPrimarySymbol: form.goldPrimarySymbol,
+      goldFxSymbol: form.goldFxSymbol,
+      goldPremiumPct: Number(form.goldPremiumPct) || 0,
+    };
+    if (form.apiKey.trim()) payload.apiKey = form.apiKey.trim();
+
+    const res = await fetch("/api/settings/market-data", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    if (res.ok) {
+      toast.success("Đã lưu cài đặt dữ liệu giá");
+      load();
+      setForm(prev => ({ ...prev, apiKey: "" }));
+    } else {
+      const data = await res.json();
+      toast.error(data.error || "Lưu thất bại");
+    }
+    setSaving(false);
+  };
+
+  const syncNow = async () => {
+    setSyncing(true);
+    const res = await fetch("/api/settings/market-data", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "sync-now" }),
+    });
+    const data = await res.json();
+    if (res.ok) {
+      toast.success(`Đồng bộ: ${data.updated || 0} thành công, ${data.failed || 0} lỗi`);
+    } else {
+      toast.error(data.error || "Không đồng bộ được");
+    }
+    setSyncing(false);
+  };
+
+  if (loading) return <div className="card p-8"><div className="skeleton h-36 w-full"></div></div>;
+
+  return (
+    <div className="space-y-6">
+      <div className="card p-6">
+        <div className="flex items-center gap-2 mb-1">
+          <RefreshCw size={16} className="text-[var(--accent)]" />
+          <h3 className="section-label mb-0">Nguồn giá tự động</h3>
+        </div>
+        <p className="text-xs text-[var(--text-muted)] mb-5">
+          Hỗ trợ 2 chế độ: tự động và nhập tay fallback khi nguồn lỗi.
+        </p>
+
+        <div className="space-y-4">
+          <div className="form-group">
+            <label className="form-label">Provider</label>
+            <input className="input" value="Twelve Data" readOnly />
+          </div>
+
+          <div className="form-group">
+            <label className="form-label">API Key</label>
+            <div className="relative">
+              <input
+                type={showApiKey ? "text" : "password"}
+                className="input pr-10"
+                placeholder={apiKeyMasked ? `Đang dùng: ${apiKeyMasked}` : "Nhập API key"}
+                value={form.apiKey}
+                onChange={e => setForm({ ...form, apiKey: e.target.value })}
+              />
+              <button type="button" onClick={() => setShowApiKey(v => !v)} className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)] hover:text-[var(--text)]">
+                {showApiKey ? <EyeOff size={16} /> : <Eye size={16} />}
+              </button>
+            </div>
+            <p className="text-xs text-[var(--text-muted)] mt-1">Để trống nếu muốn giữ key cũ.</p>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <label className="flex items-start gap-3 cursor-pointer p-3 rounded-xl border border-[var(--border)] bg-[var(--bg-input)]">
+              <input type="checkbox" checked={form.autoUpdate} onChange={e => setForm({ ...form, autoUpdate: e.target.checked })} className="mt-0.5 w-4 h-4 accent-[var(--accent)]" />
+              <div>
+                <div className="text-sm font-semibold">Tự động cập nhật giá</div>
+                <div className="text-xs text-[var(--text-muted)]">Scheduler sẽ tự refresh</div>
+              </div>
+            </label>
+            <div className="p-3 rounded-xl border border-[var(--border)] bg-[var(--bg-input)]">
+              <label className="text-xs text-[var(--text-muted)]">Chu kỳ (phút)</label>
+              <input
+                type="number"
+                min="1"
+                max="240"
+                className="input mt-1"
+                value={form.intervalMin}
+                onChange={e => setForm({ ...form, intervalMin: Number(e.target.value) || 15 })}
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-3 gap-3">
+            <div className="form-group">
+              <label className="form-label">Symbol vàng</label>
+              <input className="input" value={form.goldPrimarySymbol} onChange={e => setForm({ ...form, goldPrimarySymbol: e.target.value })} />
+            </div>
+            <div className="form-group">
+              <label className="form-label">Symbol USD/VND</label>
+              <input className="input" value={form.goldFxSymbol} onChange={e => setForm({ ...form, goldFxSymbol: e.target.value })} />
+            </div>
+            <div className="form-group">
+              <label className="form-label">Premium vàng nội địa (%)</label>
+              <input
+                type="number"
+                step="0.1"
+                className="input"
+                value={form.goldPremiumPct}
+                onChange={e => setForm({ ...form, goldPremiumPct: Number(e.target.value) || 0 })}
+              />
+            </div>
+          </div>
+
+          <div className="flex gap-3">
+            <button onClick={save} disabled={saving} className="btn btn-primary flex-1">
+              {saving ? "Đang lưu..." : "Lưu cài đặt"}
+            </button>
+            <button onClick={syncNow} disabled={syncing} className="btn btn-ghost border border-[var(--border)] flex-1">
+              {syncing ? "Đang đồng bộ..." : "Đồng bộ ngay"}
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   );

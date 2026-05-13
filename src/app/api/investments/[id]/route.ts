@@ -9,6 +9,7 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
   try {
     const { id } = await params;
     const body = await req.json();
+    const autoEnabled = body.autoPriceEnabled !== undefined ? !!body.autoPriceEnabled : undefined;
     const inv = await prisma.investment.update({
       where: { id },
       data: {
@@ -17,6 +18,12 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
         buyPrice: body.buyPrice !== undefined ? Number(body.buyPrice) : undefined,
         currentPrice: body.currentPrice !== undefined ? Number(body.currentPrice) : undefined,
         quantity: body.quantity !== undefined ? Number(body.quantity) : undefined,
+        priceMode: autoEnabled !== undefined
+          ? (autoEnabled ? "AUTO" : "MANUAL")
+          : (body.priceMode !== undefined ? (body.priceMode === "AUTO" ? "AUTO" : "MANUAL") : undefined),
+        autoPriceEnabled: autoEnabled,
+        autoPriceSymbol: body.autoPriceSymbol !== undefined ? (body.autoPriceSymbol ? String(body.autoPriceSymbol).trim() : null) : undefined,
+        autoFallbackManual: body.autoFallbackManual !== undefined ? !!body.autoFallbackManual : undefined,
         note: body.note,
         status: body.status,
       }
